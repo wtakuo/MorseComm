@@ -49,6 +49,21 @@ char lineBuf[96];
 int lineLen = 0;
 
 // ---- 設定 ----
+// このボードで選べる無線の種類 (設定画面ではこの順に切り替わる)
+bool radioSelectable(uint8_t r) {
+  return r == cfg::RADIO_ESPNOW || r == cfg::RADIO_OFF || (r == cfg::RADIO_LORA && net::loraAvailable());
+}
+
+uint8_t nextRadio(uint8_t r, int dir) {
+  static const uint8_t ORDER[] = {cfg::RADIO_ESPNOW, cfg::RADIO_LORA, cfg::RADIO_OFF};
+  const int n = sizeof(ORDER);
+  int i = 0;
+  while (i < n && ORDER[i] != r) i++;
+  do {
+    i = (i + n + dir) % n;
+  } while (!radioSelectable(ORDER[i]));
+  return ORDER[i];
+}
 Settings clampSettings(Settings s) {
   if (s.mode >= cw::KEY_MODE_COUNT) s.mode = (uint8_t)cw::KeyMode::IambicB;
   if (s.wpm < cfg::WPM_MIN) s.wpm = cfg::WPM_MIN;
@@ -64,7 +79,7 @@ Settings clampSettings(Settings s) {
   if (s.jitterMs > 1000) s.jitterMs = 1000;
   if (s.channel < cfg::CH_MIN || s.channel > cfg::CH_MAX) s.channel = cfg::CH_DEFAULT;
   s.swap = s.swap ? 1 : 0;
-  if (s.radio != cfg::RADIO_LORA || !net::loraAvailable()) s.radio = cfg::RADIO_ESPNOW;
+  if (!radioSelectable(s.radio)) s.radio = cfg::RADIO_ESPNOW;
   return s;
 }
 
@@ -79,7 +94,9 @@ uint16_t storedJitter(uint8_t radio) {
   return v;
 }
 
-const char* radioName(uint8_t radio) { return radio == cfg::RADIO_LORA ? "lora" : "espnow"; }
+const char* radioName(uint8_t radio) {
+  return radio == cfg::RADIO_LORA ? "lora" : radio == cfg::RADIO_OFF ? "off" : "espnow";
+}
 
 void loadSettings() {
   Settings s;
@@ -171,7 +188,7 @@ void printStats() {
 void printHelp() {
   Serial.printf(
       "commands:\n"
-      "  ch N  (通信チャンネル %d-%d)   radio espnow|lora  (無線の種類。切り替えると再起動)\n"
+      "  ch N  (通信チャンネル %d-%d)   radio espnow|lora|off  (無線の種類。off は電波を出さない。切り替えると再起動)\n"
       "  mode straight|iambic_a|iambic_b   wpm N   vol 0-5   swap 0|1   jitter N\n"
       "  side N|on|off  (サイドトーン周波数 / ON・OFF)   rxtone N  (受信トーン周波数)\n"
       "  test on [TEXT] | test off          (TEXT を現在の WPM で自動キーイング)\n"
@@ -256,7 +273,10 @@ void handleCommand(char* line) {
   } else if (!strcmp(cmd, "ch") && arg) {
     editSettings([&](Settings& s) { s.channel = n; });
   } else if (!strcmp(cmd, "radio") && arg) {
-    int r = !strcasecmp(arg, "espnow") ? cfg::RADIO_ESPNOW : !strcasecmp(arg, "lora") ? cfg::RADIO_LORA : -1;
+    int r = !strcasecmp(arg, "espnow") ? cfg::RADIO_ESPNOW
+            : !strcasecmp(arg, "lora") ? cfg::RADIO_LORA
+            : !strcasecmp(arg, "off")  ? cfg::RADIO_OFF
+                                       : -1;
     if (r < 0 || (r == cfg::RADIO_LORA && !net::loraAvailable())) {
       Serial.println(r < 0 ? "unknown radio" : "LoRa is not available on this board");
       return;
@@ -347,7 +367,7 @@ void adjustSelected(int dir) {
       default: break;
     }
   });
-  if (selected == ui::Item::Radio) setRadio(g_settings.radio == cfg::RADIO_LORA ? cfg::RADIO_ESPNOW : cfg::RADIO_LORA);
+  if (selected == ui::Item::Radio) setRadio(nextRadio(g_settings.radio, dir));
 }
 
 // チャンネルを 1 つ進める/戻す (CH_MIN..CH_MAX で循環)
@@ -378,9 +398,14 @@ void pollInput(uint32_t now) {
   if (g_logOn && t.kind != ui::TouchEvent::None) Serial.printf("touch x=%d y=%d kind=%d\n", t.x, t.y, t.kind);
 
   if (!settingsScreen) {
+    bool radioOn = net::radio() != cfg::RADIO_OFF;  // 電波 OFF ではチャンネルは意味が無いので切り替えない
     switch (b) {
-      case ui::Button::Key1Short: stepChannel(+1, now); break;
-      case ui::Button::Key1Long: stepChannel(-1, now); break;
+      case ui::Button::Key1Short:
+        if (radioOn) stepChannel(+1, now);
+        break;
+      case ui::Button::Key1Long:
+        if (radioOn) stepChannel(-1, now);
+        break;
       case ui::Button::Key2Short: enterSettings(true, now); break;
       case ui::Button::Key2Long: ui::clearText(); break;
       default: break;

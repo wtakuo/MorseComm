@@ -46,6 +46,7 @@ constexpr int32_t SENDER_RESTART_BACKSTEP_MS = 2000;  // txMs がこれ以上戻
 // ---- 無線の種類 (設定で切り替え。切り替えると再起動する) ----
 constexpr uint8_t RADIO_ESPNOW = 0;
 constexpr uint8_t RADIO_LORA = 1;   // Nesso N1 のみ (SX1262)
+constexpr uint8_t RADIO_OFF = 2;    // 電波を出さない (単独での送信練習用。受信もしない)
 
 // ---- ESP-NOW ----
 constexpr uint8_t ESPNOW_CHANNEL = 1;   // Wi-Fi のチャンネル (全局共通・固定)

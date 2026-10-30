@@ -39,6 +39,10 @@ bool injectDrop(const uint8_t* data, size_t len) {
 
 bool begin(uint8_t radio, uint8_t channel) {
   rxQueue = xQueueCreate(RX_QUEUE_LEN, sizeof(RxItem));
+  if (radio == cfg::RADIO_OFF) {
+    curRadio = cfg::RADIO_OFF;
+    return true;
+  }
   if (radio == cfg::RADIO_LORA && lora::available()) {
     curRadio = cfg::RADIO_LORA;
     return lora::begin(channel);
@@ -50,6 +54,7 @@ bool begin(uint8_t radio, uint8_t channel) {
 uint8_t radio() { return curRadio; }
 
 bool send(const uint8_t* data, size_t len) {
+  if (curRadio == cfg::RADIO_OFF) return false;
   if (curRadio == cfg::RADIO_LORA) return lora::send(data, len);  // ロス注入は送信直前に判定する
   if (detail::injectDrop(data, len)) return true;
   return espnow::send(data, len);

@@ -34,6 +34,7 @@ constexpr uint16_t COL_BTN = 0x31A6;     // タッチボタン
 constexpr uint16_t COL_WARN = 0xF9E7;    // 赤
 constexpr uint16_t COL_EDIT = 0xFB20;    // 変更中の項目の背景 (橙)
 constexpr uint16_t COL_LORA = 0x8010;    // LoRa 使用中のチャンネル表示の背景 (紫)
+constexpr uint16_t COL_OFF_BADGE = 0x52AA;  // 電波 OFF の表示の背景 (灰)
 
 LGFX_Sprite canvas;
 int listTop = 0;  // 設定画面: 先頭に表示している項目
@@ -148,7 +149,11 @@ void itemValue(const Settings& s, Item it, char* buf, size_t n) {
     case Item::Swap: snprintf(buf, n, "%s", s.swap ? "SWAPPED" : "NORMAL"); break;
     case Item::Radio:
       // 動作中と違う場合は、設定画面を抜けると再起動して切り替わる
-      snprintf(buf, n, "%s%s", s.radio == cfg::RADIO_LORA ? "LoRa" : "ESP-NOW", s.radio != net::radio() ? " *" : "");
+      snprintf(buf, n, "%s%s",
+               s.radio == cfg::RADIO_LORA  ? "LoRa"
+               : s.radio == cfg::RADIO_OFF ? "OFF"
+                                           : "ESP-NOW",
+               s.radio != net::radio() ? " *" : "");
       break;
     default: buf[0] = 0; break;
   }
@@ -249,7 +254,7 @@ TouchEvent pollTouch(bool settingsScreen) {
 
 bool touchAvailable() { return hw::hasTouch(); }
 
-int itemCount() { return net::loraAvailable() ? (int)Item::Count : (int)Item::Radio; }
+int itemCount() { return (int)Item::Count; }
 
 Battery readBattery() { return hw::battery(); }
 
@@ -259,17 +264,22 @@ void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const B
   canvas.fillScreen(COL_BG);
   useLabelFont();
 
-  // 1 行目: チャンネル (LoRa 使用中は "LoRa1" のように紫で)、リンク状態、電池
+  // 1 行目: チャンネル (LoRa 使用中は "LoRa1" のように紫で、電波 OFF では灰色の "OFF")、リンク状態、電池
   bool lora = net::radio() == cfg::RADIO_LORA;
-  snprintf(tmp, sizeof(tmp), "%s%u", lora ? "LoRa" : "CH", s.channel);
-  uint16_t chBg = lora ? COL_LORA : COL_SEL;
+  bool radioOff = net::radio() == cfg::RADIO_OFF;
+  if (radioOff) snprintf(tmp, sizeof(tmp), "OFF");
+  else snprintf(tmp, sizeof(tmp), "%s%u", lora ? "LoRa" : "CH", s.channel);
+  uint16_t chBg = radioOff ? COL_OFF_BADGE : lora ? COL_LORA : COL_SEL;
   canvas.fillRoundRect(0, Y_STATUS, 8 * strlen(tmp) + 6, 16, 3, chBg);
   canvas.setTextColor(TFT_WHITE, chBg);
   canvas.drawString(tmp, 3, Y_STATUS);
   int x = 8 * strlen(tmp) + 12;
   uint32_t total = snap.rx.packets + snap.rx.lost;
   int lossPct = total ? (int)(100.0f * snap.rx.lost / total + 0.5f) : 0;
-  if (!snap.linkUp) {
+  if (radioOff) {
+    canvas.setTextColor(COL_LABEL, COL_BG);
+    canvas.drawString("RADIO OFF", x, Y_STATUS);
+  } else if (!snap.linkUp) {
     // 受信中の局がいない: 一度も受信していないか、全局が途絶えた
     canvas.setTextColor(COL_WARN, COL_BG);
     if (snap.rx.packets == 0) snprintf(tmp, sizeof(tmp), "NO SIGNAL");
@@ -321,7 +331,7 @@ void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const B
   drawText(txText, TX_ROWS, Y_TX_TEXT, COL_TX);
 
   // チャンネル切り替え直後は番号を大きく表示する
-  if (showChannel) {
+  if (showChannel && !radioOff) {
     constexpr int BW = 150, BH = 70;
     int bx = (W - BW) / 2, by = (H - BH) / 2 + 8;
     canvas.fillRoundRect(bx, by, BW, BH, 10, chBg);

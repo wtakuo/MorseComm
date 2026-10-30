@@ -28,9 +28,10 @@ struct Stats {
   uint32_t airMs = 0;      // LoRa: 送信時間の合計
 };
 
-bool begin(uint8_t radio, uint8_t channel);  // radio = cfg::RADIO_*
+// radio = cfg::RADIO_*。RADIO_OFF なら Wi-Fi も LoRa も初期化しない (電波を出さない)
+bool begin(uint8_t radio, uint8_t channel);
 uint8_t radio();
-// 送る。LoRa は最新の 1 パケットだけを保持し、送信できる時になったら送る (古いものは上書き)
+// 送る (RADIO_OFF では何もしない)。LoRa は最新の 1 パケットだけを保持し、送信できる時になったら送る (古いものは上書き)
 bool send(const uint8_t* data, size_t len);
 bool receive(RxItem& item);  // キューから1つ取り出す (待たない)
 // 通信チャンネルが変わった (LoRa は周波数を変える)
