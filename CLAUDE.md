@@ -286,7 +286,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 ### 実機テストの手順 (再開時に使う)
 - 書き込み: `arduino-cli compile -b esp32:esp32:arduino_nesso_n1 . && arduino-cli upload -b esp32:esp32:arduino_nesso_n1 -p /dev/cu.usbmodem101 .` (1101 も同様)
 - シリアル操作: `stty -f PORT 115200 raw -echo` してから fd を開き、コマンドを書き込み、`cat` で読む
-  (scratchpad に ser.sh を作って使っていた: `ser.sh PORT 秒数 "cmd1" "cmd2"`)
+  (`tools/ser.sh PORT 秒数 "cmd1" "cmd2"` でコマンド送信と出力の取得ができる)
 - 典型的な確認: 送信側 `test on PARIS`、受信側 `log 1` → `RX D t=.. prevU=60` 行と `RXCHR` 行を集計。
   ロス注入は送信側 `loss 50` / `dropup 1`
 - ホストテスト: `make -C test/host test`
