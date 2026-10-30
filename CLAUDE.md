@@ -214,7 +214,9 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - `/dev/cu.usbmodem101`  : [Nesso-A] — アイアンビックパドル (GPIO4, GPIO5)
   - `/dev/cu.usbmodem1101` : [Nesso-B] — ストレートキー (GPIO4)
 - キー・パドルの接続ピン: ストレート = GPIO4。パドル = GPIO4 / GPIO5 (DIT/DAH の対応は要確認。`swap 1` で入れ替え)
-- トーン出力の方法とピン: 内蔵ブザー `BEEP_PIN` = GPIO11 を LEDC PWM で駆動 (音量はデューティ比で5段階)
+- トーン出力の方法とピン: 内蔵ブザー `BEEP_PIN` = GPIO11 を LEDC PWM で駆動 (音量はデューティ比で5段階)。サイドトーンと受信トーンは別周波数、自局 DOWN 時はサイドトーン優先
+- タッチ: FT6x36 (0x38, `NessoTouch`)。生座標 (縦置き 135x240) → setRotation(1) の画面座標は「xy 入れ替え + y 反転」で正しいことを実機で確認 (config.h の TOUCH_*)
+- 電池: `NessoBattery::getChargeLevel()` (BQ27220) で残量 %。`battery.begin()` は充電設定を書き換えるので呼んでいない
 - シリアル: USB CDC (115200)。`arduino-cli monitor` はパイプ経由だと何も出ないため、
   `stty -f PORT 115200 raw` + `cat` で読む
 - 実測したネットワーク遅延・ロス: 2台を机上に並べた状態で RSSI -20〜-50 dBm、ロス 0.2% 程度。

@@ -29,12 +29,16 @@ constexpr uint32_t UI_INTERVAL_MS = 100;
 constexpr uint32_t BUTTON_INTERVAL_MS = 20;
 constexpr uint32_t SAVE_DELAY_MS = 2000;      // 最後の変更からこの時間後に保存
 constexpr uint32_t STATS_INTERVAL_MS = 5000;  // log on のときの統計出力間隔
-constexpr int TONE_STEP_HZ = 50;
+constexpr uint32_t BATTERY_INTERVAL_MS = 5000;
+constexpr uint32_t SETTINGS_TIMEOUT_MS = 30000;  // 設定画面を無操作で抜けるまで
 
 Preferences prefs;
 ui::Item selected = ui::Item::Mode;
+bool settingsScreen = false;
+uint32_t lastSettingsOpMs = 0;
+ui::Battery battery;
 bool saveDirty = false;
-uint32_t lastChangeMs = 0, lastUiMs = 0, lastBtnMs = 0, lastStatsMs = 0;
+uint32_t lastChangeMs = 0, lastUiMs = 0, lastBtnMs = 0, lastStatsMs = 0, lastBatteryMs = 0;
 char lineBuf[96];
 int lineLen = 0;
 
@@ -43,8 +47,13 @@ Settings clampSettings(Settings s) {
   if (s.mode >= cw::KEY_MODE_COUNT) s.mode = (uint8_t)cw::KeyMode::IambicB;
   if (s.wpm < cfg::WPM_MIN) s.wpm = cfg::WPM_MIN;
   if (s.wpm > cfg::WPM_MAX) s.wpm = cfg::WPM_MAX;
-  if (s.toneHz < cfg::TONE_HZ_MIN) s.toneHz = cfg::TONE_HZ_MIN;
-  if (s.toneHz > cfg::TONE_HZ_MAX) s.toneHz = cfg::TONE_HZ_MAX;
+  auto clampHz = [](uint16_t& hz) {
+    if (hz < cfg::TONE_HZ_MIN) hz = cfg::TONE_HZ_MIN;
+    if (hz > cfg::TONE_HZ_MAX) hz = cfg::TONE_HZ_MAX;
+  };
+  clampHz(s.sideHz);
+  clampHz(s.rxHz);
+  s.sideOn = s.sideOn ? 1 : 0;
   if (s.volume > ToneOut::VOLUME_MAX) s.volume = ToneOut::VOLUME_MAX;
   if (s.jitterMs > 1000) s.jitterMs = 1000;
   s.swap = s.swap ? 1 : 0;
@@ -56,7 +65,9 @@ void loadSettings() {
   prefs.begin("morse", true);
   s.mode = prefs.getUChar("mode", s.mode);
   s.wpm = prefs.getUChar("wpm", s.wpm);
-  s.toneHz = prefs.getUShort("tone", s.toneHz);
+  s.sideOn = prefs.getUChar("sideon", s.sideOn);
+  s.sideHz = prefs.getUShort("sidehz", s.sideHz);
+  s.rxHz = prefs.getUShort("rxhz", s.rxHz);
   s.volume = prefs.getUChar("vol", s.volume);
   s.swap = prefs.getUChar("swap", s.swap);
   s.jitterMs = prefs.getUShort("jitter", s.jitterMs);
@@ -72,7 +83,9 @@ void saveSettings() {
   prefs.begin("morse", false);
   prefs.putUChar("mode", s.mode);
   prefs.putUChar("wpm", s.wpm);
-  prefs.putUShort("tone", s.toneHz);
+  prefs.putUChar("sideon", s.sideOn);
+  prefs.putUShort("sidehz", s.sideHz);
+  prefs.putUShort("rxhz", s.rxHz);
   prefs.putUChar("vol", s.volume);
   prefs.putUChar("swap", s.swap);
   prefs.putUShort("jitter", s.jitterMs);
@@ -106,8 +119,10 @@ void printSettings() {
   Settings s = g_settings;
   Control c = g_control;
   unlockShared();
-  Serial.printf("mode=%s wpm=%u tone=%uHz vol=%u swap=%u jitter=%ums | test=%s \"%s\" loss=%u%% dropup=%u log=%u\n",
-                cw::keyModeName((cw::KeyMode)s.mode), s.wpm, s.toneHz, s.volume, s.swap, s.jitterMs,
+  Serial.printf(
+      "mode=%s wpm=%u side=%s,%uHz rx=%uHz vol=%u swap=%u jitter=%ums | test=%s \"%s\" loss=%u%% dropup=%u log=%u\n",
+      cw::keyModeName((cw::KeyMode)s.mode), s.wpm, s.sideOn ? "on" : "off", s.sideHz, s.rxHz, s.volume, s.swap,
+      s.jitterMs,
                 c.testOn ? "on" : "off", c.testText, c.lossPct, c.dropUp, g_logOn);
 }
 
@@ -118,16 +133,18 @@ void printStats() {
   uint32_t total = sn.rx.packets + sn.rx.lost;
   Serial.printf(
       "STATS rx=%u lost=%u (%.1f%%) stale=%u resync=%u late=%u wd=%u reassert=%u restart=%u rssi=%d offset=%ld "
-      "link=%u | tx=%u injDrop=%u sent=%u sendErr=%u cbFail=%u rxQDrop=%u\n",
+      "link=%u bat=%d%%%s | tx=%u injDrop=%u sent=%u sendErr=%u cbFail=%u rxQDrop=%u\n",
       sn.rx.packets, sn.rx.lost, total ? 100.0 * sn.rx.lost / total : 0.0, sn.rx.stale, sn.rx.resyncs, sn.rx.late,
-      sn.rx.watchdogs, sn.rx.reasserts, sn.rx.restarts, sn.rssi, (long)sn.offset, sn.linkUp, sn.txPackets,
+      sn.rx.watchdogs, sn.rx.reasserts, sn.rx.restarts, sn.rssi, (long)sn.offset, sn.linkUp, battery.valid ? battery.percent : -1,
+      battery.charging ? "(chg)" : "", sn.txPackets,
       sn.injectedDrops, sn.net.sent, sn.net.sendErr, sn.net.cbFail, sn.net.rxDropped);
 }
 
 void printHelp() {
   Serial.println(
       "commands:\n"
-      "  mode straight|iambic_a|iambic_b   wpm N   tone N   vol 0-5   swap 0|1   jitter N\n"
+      "  mode straight|iambic_a|iambic_b   wpm N   vol 0-5   swap 0|1   jitter N\n"
+      "  side N|on|off  (サイドトーン周波数 / ON・OFF)   rxtone N  (受信トーン周波数)\n"
       "  test on [TEXT] | test off          (TEXT を現在の WPM で自動キーイング)\n"
       "  loss N   (送信を N% 省略)   dropup 0|1 (UP のパケットを省略)\n"
       "  log 0|1  (遷移ログと定期統計)   stats   show   clear   help");
@@ -150,8 +167,15 @@ void handleCommand(char* line) {
     editSettings([&](Settings& s) { s.mode = m; });
   } else if (!strcmp(cmd, "wpm") && arg) {
     editSettings([&](Settings& s) { s.wpm = n; });
-  } else if (!strcmp(cmd, "tone") && arg) {
-    editSettings([&](Settings& s) { s.toneHz = n; });
+  } else if (!strcmp(cmd, "side") && arg) {
+    if (!strcasecmp(arg, "on") || !strcasecmp(arg, "off")) {
+      bool on = !strcasecmp(arg, "on");
+      editSettings([&](Settings& s) { s.sideOn = on; });
+    } else {
+      editSettings([&](Settings& s) { s.sideHz = n; });
+    }
+  } else if (!strcmp(cmd, "rxtone") && arg) {
+    editSettings([&](Settings& s) { s.rxHz = n; });
   } else if (!strcmp(cmd, "vol") && arg) {
     editSettings([&](Settings& s) { s.volume = n; });
   } else if (!strcmp(cmd, "swap") && arg) {
@@ -181,6 +205,7 @@ void handleCommand(char* line) {
     printStats();
     return;
   } else if (!strcmp(cmd, "show")) {
+    Serial.printf("touch=%s\n", ui::touchAvailable() ? "ok" : "not found");
   } else if (!strcmp(cmd, "clear")) {
     ui::clearText();
   } else if (!strcmp(cmd, "save")) {
@@ -208,32 +233,62 @@ void pollSerial() {
   }
 }
 
-// ---- ボタン ----
-//  KEY1 短押し: 変更する項目を選ぶ (MODE → WPM → TONE → VOL)
-//  KEY1 長押し: 表示テキストを消去
-//  KEY2 短押し: 選択項目を増やす / KEY2 長押し: 減らす
+// ---- ボタン・タッチ ----
+// メイン画面:  KEY1 短押し = 設定画面へ / KEY1 長押し = 表示テキストを消去
+// 設定画面:    KEY1 短押し = 次の項目 / KEY2 短押し = 前の項目 / KEY1 長押し = 終了 (保存)
+//              項目をタッチして選択、右側の [+] [-] をタッチして値を変更 (押し続けで連続変更)
 void adjustSelected(int dir) {
   editSettings([&](Settings& s) {
     switch (selected) {
       case ui::Item::Mode: s.mode = (s.mode + cw::KEY_MODE_COUNT + dir) % cw::KEY_MODE_COUNT; break;
       case ui::Item::Wpm: s.wpm += dir; break;
-      case ui::Item::Tone: s.toneHz += dir * TONE_STEP_HZ; break;
-      case ui::Item::Volume: s.volume = (s.volume + ToneOut::VOLUME_MAX + 1 + dir) % (ToneOut::VOLUME_MAX + 1); break;
+      case ui::Item::SideOn: s.sideOn = !s.sideOn; break;
+      case ui::Item::SideHz: s.sideHz += dir * cfg::TONE_STEP_HZ; break;
+      case ui::Item::RxHz: s.rxHz += dir * cfg::TONE_STEP_HZ; break;
+      case ui::Item::Volume:
+        if ((dir > 0 && s.volume < ToneOut::VOLUME_MAX) || (dir < 0 && s.volume > 0)) s.volume += dir;
+        break;
+      case ui::Item::Swap: s.swap = !s.swap; break;
       default: break;
     }
   });
 }
 
-void pollButtons(uint32_t now) {
-  switch (ui::pollButtons(now)) {
-    case ui::Button::Key1Short:
-      selected = (ui::Item)(((int)selected + 1) % (int)ui::Item::Count);
-      break;
-    case ui::Button::Key1Long: ui::clearText(); break;
-    case ui::Button::Key2Short: adjustSelected(+1); break;
-    case ui::Button::Key2Long: adjustSelected(-1); break;
+void enterSettings(bool on, uint32_t now) {
+  settingsScreen = on;
+  lastSettingsOpMs = now;
+  if (!on && saveDirty) saveSettings();
+  lastUiMs = 0;  // すぐ描き直す
+}
+
+void pollInput(uint32_t now) {
+  const int count = (int)ui::Item::Count;
+  ui::Button b = ui::pollButtons(now);
+  ui::TouchEvent t = ui::pollTouch(settingsScreen);
+  if (b != ui::Button::None || t.kind != ui::TouchEvent::None) {
+    lastSettingsOpMs = now;
+    lastUiMs = 0;
+  }
+  if (g_logOn && t.kind != ui::TouchEvent::None) Serial.printf("touch x=%d y=%d kind=%d\n", t.x, t.y, t.kind);
+
+  if (!settingsScreen) {
+    if (b == ui::Button::Key1Short) enterSettings(true, now);
+    else if (b == ui::Button::Key1Long) ui::clearText();
+    return;
+  }
+  switch (b) {
+    case ui::Button::Key1Short: selected = (ui::Item)(((int)selected + 1) % count); break;
+    case ui::Button::Key2Short: selected = (ui::Item)(((int)selected + count - 1) % count); break;
+    case ui::Button::Key1Long: enterSettings(false, now); return;
     default: break;
   }
+  switch (t.kind) {
+    case ui::TouchEvent::Row: selected = (ui::Item)t.row; break;
+    case ui::TouchEvent::Plus: adjustSelected(+1); break;
+    case ui::TouchEvent::Minus: adjustSelected(-1); break;
+    default: break;
+  }
+  if (now - lastSettingsOpMs >= SETTINGS_TIMEOUT_MS) enterSettings(false, now);
 }
 
 // ---- cwTask からの出力 ----
@@ -288,7 +343,11 @@ void loop() {
   drainOutput();
   if (now - lastBtnMs >= BUTTON_INTERVAL_MS) {
     lastBtnMs = now;
-    pollButtons(now);
+    pollInput(now);
+  }
+  if (now - lastBatteryMs >= BATTERY_INTERVAL_MS || lastBatteryMs == 0) {
+    lastBatteryMs = now;
+    battery = ui::readBattery();
   }
   if (now - lastUiMs >= UI_INTERVAL_MS) {
     lastUiMs = now;
@@ -297,9 +356,10 @@ void loop() {
     Control c = g_control;
     Snapshot sn = g_snapshot;
     unlockShared();
-    ui::draw(s, c, sn, selected);
+    if (settingsScreen) ui::drawSettings(s, selected, battery);
+    else ui::drawMain(c, sn, battery);
   }
-  if (saveDirty && now - lastChangeMs >= SAVE_DELAY_MS) saveSettings();
+  if (saveDirty && !settingsScreen && now - lastChangeMs >= SAVE_DELAY_MS) saveSettings();
   if (g_logOn && now - lastStatsMs >= STATS_INTERVAL_MS) {
     lastStatsMs = now;
     printStats();

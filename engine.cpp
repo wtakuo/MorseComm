@@ -38,7 +38,34 @@ uint8_t localState = 0;
 uint32_t localLastMs = 0, remoteLastMs = 0;
 uint32_t lastSnapshotMs = 0;
 
+uint16_t curHz = 0;
+uint16_t previewHz = 0;
+uint32_t previewUntil = 0;
+
 void out(const OutItem& it) { xQueueSend(outQ, &it, 0); }
+
+void preview(uint16_t hz, uint32_t now) {
+  previewHz = hz;
+  previewUntil = now + cfg::TONE_PREVIEW_MS;
+}
+
+// トーン: 自局 (サイドトーン) と受信再生の OR。周波数は自局優先
+void updateTone(uint32_t now) {
+  bool side = localState && set.sideOn;
+  bool remote = rx.state();
+  bool prev = previewHz && (int32_t)(now - previewUntil) < 0;
+  if (!prev) previewHz = 0;
+  if (!side && !remote && !prev) {
+    toneOut.off();
+    return;
+  }
+  uint16_t hz = side ? set.sideHz : remote ? set.rxHz : previewHz;
+  if (hz != curHz) {
+    toneOut.setFrequency(hz);
+    curHz = hz;
+  }
+  toneOut.on();
+}
 
 // 自局のキー状態を変える (どのモードでもここを通る)
 void setLocal(uint8_t st, uint32_t t) {
@@ -53,7 +80,6 @@ void setLocal(uint8_t st, uint32_t t) {
 void applySettings(uint32_t now, bool modeChanged) {
   iambic.setWpm(set.wpm);
   iambic.setModeB(set.mode == (uint8_t)cw::KeyMode::IambicB);
-  toneOut.setFrequency(set.toneHz);
   toneOut.setVolume(set.volume);
   rx.setDelay(set.jitterMs);
   if (modeChanged) {
@@ -68,6 +94,7 @@ void syncShared(uint32_t now) {
   bool sChanged = g_settingsVer != setVer;
   bool cChanged = g_controlVer != ctlVer;
   uint8_t oldMode = set.mode;
+  Settings oldSet = set;
   Control oldCtl = ctl;
   if (sChanged) {
     set = g_settings;
@@ -80,7 +107,12 @@ void syncShared(uint32_t now) {
   logOn = g_logOn;
   unlockShared();
 
-  if (sChanged) applySettings(now, set.mode != oldMode);
+  if (sChanged) {
+    applySettings(now, set.mode != oldMode);
+    // 音に関わる設定を変えたら、その音を短く鳴らして確認できるようにする
+    if (set.sideHz != oldSet.sideHz || (set.sideOn && !oldSet.sideOn)) preview(set.sideHz, now);
+    else if (set.rxHz != oldSet.rxHz || set.volume != oldSet.volume) preview(set.rxHz, now);
+  }
   if (!cChanged) return;
   if (ctl.testOn && (!oldCtl.testOn || strcmp(ctl.testText, oldCtl.testText) != 0)) {
     textKeyer.start(ctl.testText, set.wpm, now);
@@ -179,9 +211,7 @@ void task(void*) {
     readKeys(now);
     transmit(now);
     receive(now);
-    // サイドトーン (ローカル) と受信再生の OR
-    if (localState || rx.state()) toneOut.on();
-    else toneOut.off();
+    updateTone(now);
     decode(now);
     publishSnapshot(now);
     vTaskDelayUntil(&last, 1);
@@ -195,7 +225,8 @@ bool begin() {
   pinMode(cfg::PIN_STRAIGHT, INPUT_PULLUP);
   pinMode(cfg::PIN_PADDLE_DIT, INPUT_PULLUP);
   pinMode(cfg::PIN_PADDLE_DAH, INPUT_PULLUP);
-  toneOut.begin(cfg::PIN_BUZZER, cfg::TONE_HZ_DEFAULT);
+  toneOut.begin(cfg::PIN_BUZZER, cfg::SIDE_HZ_DEFAULT);
+  curHz = cfg::SIDE_HZ_DEFAULT;
   hist = cw::TxHistory((uint16_t)esp_random());
   pktSeq = (uint16_t)esp_random();
   bool ok = net::begin(cfg::ESPNOW_CHANNEL);

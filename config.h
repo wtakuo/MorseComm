@@ -22,9 +22,18 @@ constexpr int WPM_MIN = 5;
 constexpr int WPM_MAX = 50;
 
 // ---- トーン ----
-constexpr int TONE_HZ_DEFAULT = 700;
+constexpr int SIDE_HZ_DEFAULT = 700;   // サイドトーン (自局モニタ)
+constexpr int RX_HZ_DEFAULT = 600;     // 受信トーン
 constexpr int TONE_HZ_MIN = 300;
 constexpr int TONE_HZ_MAX = 1500;
+constexpr int TONE_STEP_HZ = 50;
+constexpr int VOLUME_DEFAULT = 3;
+constexpr uint32_t TONE_PREVIEW_MS = 150;  // 設定変更時の試聴音の長さ
+
+// ---- タッチパネル (FT6336, 生座標はパネル縦置き 135x240) → 画面 (setRotation(1), 240x135) ----
+constexpr bool TOUCH_SWAP_XY = true;
+constexpr bool TOUCH_INVERT_X = false;  // 入れ替え後の x を反転
+constexpr bool TOUCH_INVERT_Y = true;   // 入れ替え後の y を反転
 
 // ---- 送信スケジュール (§4.2) ----
 constexpr uint32_t TX_INTERVAL_ACTIVE_MS = 20;   // DOWN 中と UP 後しばらくの送信間隔

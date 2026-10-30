@@ -10,8 +10,10 @@
 struct Settings {
   uint8_t mode = (uint8_t)cw::KeyMode::IambicB;
   uint8_t wpm = cfg::WPM_DEFAULT;
-  uint16_t toneHz = cfg::TONE_HZ_DEFAULT;
-  uint8_t volume = 3;
+  uint8_t sideOn = 1;  // サイドトーン ON/OFF
+  uint16_t sideHz = cfg::SIDE_HZ_DEFAULT;
+  uint16_t rxHz = cfg::RX_HZ_DEFAULT;
+  uint8_t volume = cfg::VOLUME_DEFAULT;
   uint8_t swap = 0;  // パドルの DIT/DAH 入れ替え
   uint16_t jitterMs = cfg::JITTER_DELAY_MS;
 };
