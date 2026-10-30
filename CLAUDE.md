@@ -47,15 +47,18 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   engine.h/.cpp         # 1ms 周期のキーイングタスク (キー入力〜送信、受信再生、トーン、デコード)
   shared.h              # タスク間の共有データ
   morse_table.h         # 符号表
-  config.h              # ピン、既定パラメータ、MACアドレス/グループID
+  board.h               # ボード判別 (ARDUINO_ARDUINO_NESSO_N1 / ARDUINO_M5STACK_STICKS3) とキーのピン
+  config.h              # 既定パラメータ (ボード共通、Arduino非依存)
   protocol.h            # パケット構造体、エンコード/デコード (Arduino非依存)
   keyer.h               # ストレートキー処理、イアンビックキーヤー (Arduino非依存の状態機械)
   jitter.h              # 受信側ジッタバッファ・再生スケジューラ (Arduino非依存)
   morse_decoder.h       # タイミングからの文字デコード (Arduino非依存)
-  tone_out.h/.cpp       # トーン出力の抽象化 (ハード依存)
-  net_espnow.h/.cpp     # ESP-NOW 送受信ラッパ (ハード依存)
-  ui.h/.cpp             # 画面 (メイン/設定)・ボタン・タッチ・電池表示 (ハード依存)
-  power.h/.cpp          # USB 給電検出・ディープスリープ (ハード依存)
+  tone_out.h + tone_out_nesso.cpp / tone_out_sticks3.cpp   # トーン出力 (ボードごと)
+  net_espnow.h/.cpp     # ESP-NOW 送受信ラッパ (ボード共通)
+  ui.h/.cpp             # 画面 (メイン/設定) の描画とボタン・タッチ入力の解釈 (ボード共通)
+  hw.h + hw_nesso.cpp / hw_sticks3.cpp                     # 画面デバイス・ボタン・タッチ・電池 (ボードごと)
+  power.h + power_nesso.cpp / power_sticks3.cpp            # USB 給電検出・ディープスリープ (ボードごと)
+  (ボードごとの .cpp は全体を `#if defined(BOARD_xxx)` で囲む。Arduino はフォルダ内の全 .cpp をビルドするため)
   peers.h               # 複数局の受信: 送信元 MAC ごとの Receiver + デコーダ、全局 OR (Arduino非依存)
   tools/ser.sh          # シリアルへのコマンド送信と出力取得
   README.md             # 使い方・シリアルコマンド・仕組み (ユーザー向け)
@@ -227,6 +230,19 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - 電池: `NessoBattery::getChargeLevel()` (BQ27220) で残量 %。`battery.begin()` は充電設定を書き換えるので呼んでいない
 - シリアル: USB CDC (115200)。`arduino-cli monitor` はパイプ経由だと何も出ないため、
   `stty -f PORT 115200 raw` + `cat` で読む
+- M5StickS3 (2026-10-30 調査・実機確認):
+  - FQBN: `m5stack:esp32:m5stack_sticks3` (M5Stack のボードパッケージ 3.3.10。esp32:esp32 には無い)。
+    コアのヘッダが NUM_DIGITAL_PINS 等の再定義警告を出すが無害
+  - **2 機種を同じフォルダからビルドするので `--build-path build/<board>` を必ず分ける**
+    (分けないとビルドキャッシュが共有され、別チップ向けのブートローダを書こうとして失敗する)
+  - 画面: ST7789 135x240 を M5GFX が自動判別 (M5.Display)、`setRotation(1)` で 240x135。向きはユーザー確認済み
+  - ボタン: BtnA = GPIO11 (正面), BtnB = GPIO12 (側面)、押下 = LOW。電源ボタンは読めなかった
+  - キー: Grove (Port A) GPIO10 = ストレート / DIT、GPIO9 = DAH (実機で確認)。M5.begin で外部 I2C 機器の探索を無効化している
+  - 音: ES8311 + アンプのスピーカー (M5.Speaker, 22050Hz)。既定の DMA バッファ 256x8 だと約 93ms 遅れるので
+    64x4 (約 12ms) に短縮。サイドトーン・受信トーンともユーザー確認済み
+  - 電源: PMIC は M5PM1。USB 給電は `M5.Power.getVBUSVoltage()` > 4000mV (USB 時 約 5200mV)。
+    電池 % は `getBatteryLevel()`。スリープ復帰は BtnA/BtnB (RTC GPIO) の EXT1 ANY_LOW。電池でのスリープ/復帰をユーザー確認済み
+  - ESP32-S3 でもタイミングは完全に再現 (Nesso ⇔ StickS3 双方向、PARIS / CQ で誤差 0ms)
 - 実測したネットワーク遅延・ロス: 2台を机上に並べた状態で RSSI -20〜-50 dBm、ロス 0.2% 程度。
   PARIS@20WPM の DOWN/UP 長は受信側で 60/180/420 ms ぴったりに再現された (ジッタ遅延 150ms, 遅延超過 0)
 - 15 分間の双方向連続運転 (2026-10-30, 20WPM と 44WPM のテストモードを同時に送信、机上):
@@ -289,10 +305,16 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   実機 2 台で、同チャンネルのみ受信・別チャンネルは受信しないことを確認済み。3 局以上はホストテストのみ (実機 2 台しかない)
 - シリアルコマンド: ch N / mode / wpm / side N|on|off / rxtone / vol / swap / jitter / test on [TEXT] (`[SK]` で文字間なし送信) /
   test off / loss N / dropup 0|1 / log 0|1 / stats / show / clear / save / sleep / help (README に一覧)
-- 設定は Preferences (名前空間 "morse") に保存。現在の実機設定: 101 = IAMBIC_B, 1101 = STRAIGHT
+- 設定は Preferences (名前空間 "morse") に保存。実機: Nesso (ストレートキー) = STRAIGHT、Nesso (パドル) = IAMBIC_B、
+  StickS3 (パドル) = IAMBIC_B
+- M5StickS3 対応 (2026-10-30): 上記の機能はすべて共通。設定画面はタッチが無いので選択/変更モード
+  (選択: A=次, B=変更開始, 長押し=終了 / 変更: A=+, B=-, 長押し=選択へ戻る)。設定画面の操作感はユーザー未確認
 
 ### 実機テストの手順 (再開時に使う)
-- 書き込み: `arduino-cli compile -b esp32:esp32:arduino_nesso_n1 . && arduino-cli upload -b esp32:esp32:arduino_nesso_n1 -p /dev/cu.usbmodem101 .` (1101 も同様)
+- 書き込み (ボードごとにビルドディレクトリを分ける):
+  - Nesso N1: `arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-path build/nesso -u -p PORT .`
+  - M5StickS3: `arduino-cli compile -b m5stack:esp32:m5stack_sticks3 --build-path build/sticks3 -u -p PORT .`
+  - 接続されている機器はセッションによって変わるので、`show` の出力 (power: 行の形式や mode) で判別する
 - シリアル操作: `stty -f PORT 115200 raw -echo` してから fd を開き、コマンドを書き込み、`cat` で読む
   (`tools/ser.sh PORT 秒数 "cmd1" "cmd2"` でコマンド送信と出力の取得ができる)
 - 典型的な確認: 送信側 `test on PARIS`、受信側 `log 1` → `RX D t=.. prevU=60` 行と `RXCHR` 行を集計。
