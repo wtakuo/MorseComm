@@ -12,6 +12,7 @@
 #include "../../jitter.h"
 #include "../../keyer.h"
 #include "../../morse_decoder.h"
+#include "../../peers.h"
 
 using namespace cw;
 
@@ -58,7 +59,7 @@ static std::string decodeTimeline(const std::vector<Tr>& tl, int jitterMs = 0, u
 static void testProtocolRoundTrip() {
   printf("[protocol] round trip\n");
   Packet p;
-  p.group = 0x37;
+  p.channel = 7;
   p.state = 1;
   p.pktSeq = 0xBEEF;
   p.lastTid = 0xFFFE;
@@ -71,7 +72,7 @@ static void testProtocolRoundTrip() {
   CHECK(buf[0] == 0xC7 && buf[1] == 1 && buf[4] == 0xEF && buf[5] == 0xBE, "header bytes");
   Packet q;
   CHECK(decodePacket(buf, len, q), "decode");
-  CHECK(q.group == p.group && q.state == p.state && q.pktSeq == p.pktSeq && q.lastTid == p.lastTid &&
+  CHECK(q.channel == p.channel && q.state == p.state && q.pktSeq == p.pktSeq && q.lastTid == p.lastTid &&
             q.txMs == p.txMs && q.n == p.n,
         "fields");
   CHECK(memcmp(q.age, p.age, sizeof(uint16_t) * p.n) == 0, "ages");
@@ -341,7 +342,7 @@ static SimResult simulate(const std::vector<Tr>& keying, uint32_t endMs, const C
     }
     if (sched.poll(txClock)) {
       Packet p;
-      hist.build(p, txClock, cfg::HIST_N, cfg::GROUP_ID, seq++);
+      hist.build(p, txClock, cfg::HIST_N, 1, seq++);
       uint8_t buf[PKT_MAX_SIZE];
       size_t len = encodePacket(p, buf, sizeof(buf));
       bool drop = U(rng) < o.loss;
@@ -541,12 +542,92 @@ static void testLossSim() {
   }
 }
 
+
+// =================================================================
+// 複数局: 局ごとに独立して復元・デコードし、トーンは OR
+static void testPeers() {
+  printf("[peers] multi-station\n");
+  struct Station {
+    uint8_t mac[6];
+    std::vector<Tr> tl;
+    TxHistory hist;
+    TxScheduler sched;
+    size_t ki = 0;
+    uint16_t seq = 0;
+    uint32_t clockOffset;
+  };
+  // A と B は時間をずらして送信、C は A と重なって送信 (同時送信)
+  Station st[3] = {
+      {{1, 1, 1, 1, 1, 1}, textOnce("CQ CQ DE A", 20, 1000), TxHistory(10), {}, 0, 0, 5000},
+      {{2, 2, 2, 2, 2, 2}, textOnce("R R DE B K", 25, 9000), TxHistory(20), {}, 0, 0, 123456},
+      {{3, 3, 3, 3, 3, 3}, textOnce("TEST C", 18, 2000), TxHistory(30), {}, 0, 0, 999},
+  };
+  PeerTable table;
+  std::string text[cfg::MAX_PEERS];
+  int idxOf[3] = {-1, -1, -1};
+  bool orOk = true;
+  for (uint32_t t = 0; t < 20000; t++) {
+    for (int s = 0; s < 3; s++) {
+      Station& x = st[s];
+      uint32_t clk = t + x.clockOffset;
+      while (x.ki < x.tl.size() && x.tl[x.ki].t <= t) {
+        if (x.hist.push(x.tl[x.ki].s, clk)) x.sched.onTransition(x.tl[x.ki].s, clk);
+        x.ki++;
+      }
+      if (x.sched.poll(clk)) {
+        Packet p;
+        x.hist.build(p, clk, cfg::HIST_N, 1, x.seq++);
+        if ((x.seq % 5) == 0) continue;  // 20% ロス
+        int idx;
+        Peer& peer = table.get(x.mac, t, idx);
+        idxOf[s] = idx;
+        peer.rx.onPacket(p, t + 2);
+      }
+    }
+    bool any = false;
+    for (int i = 0; i < cfg::MAX_PEERS; i++) {
+      Peer& p = table.at(i);
+      if (!p.used) continue;
+      p.rx.update(t);
+      PlayedEvent ev;
+      while (p.rx.pop(ev)) p.dec.onTransition(ev.state, ev.playMs);
+      p.dec.update(t);
+      char c;
+      while (p.dec.pop(c)) text[i] += c;
+      any |= p.rx.state() != 0;
+    }
+    if (any != table.anyDown()) orOk = false;
+  }
+  CHECK(text[idxOf[0]] == "CQ CQ DE A ", "A: '%s'", text[idxOf[0]].c_str());
+  CHECK(text[idxOf[1]] == "R R DE B K ", "B: '%s'", text[idxOf[1]].c_str());
+  CHECK(text[idxOf[2]] == "TEST C ", "C: '%s'", text[idxOf[2]].c_str());
+  CHECK(orOk && !table.anyDown(), "tone OR");
+  CHECK(table.activeCount(20000) == 3, "active=%d", table.activeCount(20000));
+  RxStats tot = table.totalStats();
+  CHECK(tot.watchdogs == 0 && tot.resyncs == 0, "wd=%u resync=%u", tot.watchdogs, tot.resyncs);
+
+  // 追い出し: MAX_PEERS を越える局が来たら最も古い局が入れ替わる。統計は合計に残る
+  uint32_t before = table.totalStats().packets;
+  for (int k = 0; k < cfg::MAX_PEERS + 2; k++) {
+    uint8_t mac[6] = {9, 9, 9, 9, 9, (uint8_t)k};
+    int idx;
+    Packet p;
+    TxHistory h(0);
+    h.build(p, 100, cfg::HIST_N, 1, 0);
+    table.get(mac, 30000 + k * 10, idx).rx.onPacket(p, 30000 + k * 10);
+  }
+  CHECK(table.totalStats().packets == before + cfg::MAX_PEERS + 2, "stats kept after eviction");
+  table.clear();
+  CHECK(!table.anyDown() && table.activeCount(30100) == 0, "clear");
+}
+
 int main() {
   testProtocolRoundTrip();
   testScheduler();
   testKeyer();
   testDecoder();
   testLossSim();
+  testPeers();
   printf("\n%d passed, %d failed\n", g_pass, g_fail);
   return g_fail ? 1 : 0;
 }

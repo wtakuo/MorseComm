@@ -55,8 +55,14 @@ constexpr uint32_t LINK_TIMEOUT_MS = 3000;       // これ以上無受信なら�
 constexpr int32_t SENDER_RESTART_BACKSTEP_MS = 2000;  // txMs がこれ以上戻ったら相手の再起動とみなす
 
 // ---- ESP-NOW ----
-constexpr uint8_t ESPNOW_CHANNEL = 1;
-constexpr uint8_t GROUP_ID = 0x37;
+constexpr uint8_t ESPNOW_CHANNEL = 1;   // Wi-Fi のチャンネル (全局共通・固定)
+
+// ---- 通信チャンネル (無線機の「チャンネル」に相当。パケットに載せ、同じ値の局どうしだけが通信する) ----
+constexpr uint8_t CH_MIN = 1;
+constexpr uint8_t CH_MAX = 10;
+constexpr uint8_t CH_DEFAULT = 1;
+constexpr uint32_t CH_OVERLAY_MS = 1200;  // チャンネル切り替え時に大きく表示する時間
+constexpr int MAX_PEERS = 6;              // 同時に受信を追跡できる局の数
 
 // ---- デコーダ ----
 constexpr uint32_t DEC_DIT_INIT_MS = 60;    // 初期 dit 長 (20 WPM)

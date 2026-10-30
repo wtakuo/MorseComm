@@ -16,6 +16,7 @@ struct Settings {
   uint8_t volume = cfg::VOLUME_DEFAULT;
   uint8_t swap = 0;  // パドルの DIT/DAH 入れ替え
   uint16_t jitterMs = cfg::JITTER_DELAY_MS;
+  uint8_t channel = cfg::CH_DEFAULT;  // 通信チャンネル
 };
 
 // 実行時の制御 (保存しない): テストモード・ロス注入
@@ -32,11 +33,12 @@ struct Snapshot {
   net::Stats net;
   int32_t offset = 0;
   int8_t rssi = 0;
-  bool linkUp = false;
+  bool linkUp = false;  // リンクが生きている局が 1 つ以上ある
+  int stations = 0;      // リンクが生きている局の数
   bool localDown = false;
   bool remoteDown = false;
   int localWpm = 0;    // 自局デコーダの推定 WPM
-  int remoteWpm = 0;   // 相手デコーダの推定 WPM
+  int remoteWpm = 0;   // 最後に受信した局のデコーダの推定 WPM
   uint32_t txPackets = 0;
   uint32_t injectedDrops = 0;
   uint32_t lastActivityMs = 0;  // 最後に自局・相手局のキー遷移があった時刻
@@ -51,6 +53,7 @@ struct OutItem {
   uint8_t eventKind;   // cw::EventKind (LogRemote)
   uint32_t t;
   uint32_t dur;        // 直前の状態の長さ
+  uint8_t peer = 0;    // CharRx / LogRemote: 送信元の局 (PeerTable のスロット番号)
 };
 
 void lockShared();

@@ -276,26 +276,37 @@ Battery readBattery() {
   return b;
 }
 
-void drawMain(const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec) {
+void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec,
+              bool showChannel) {
   char tmp[48];
   canvas.fillScreen(COL_BG);
   useLabelFont();
 
-  // 1 行目: リンク状態と電池
+  // 1 行目: チャンネル、リンク状態、電池
+  snprintf(tmp, sizeof(tmp), "CH%u", s.channel);
+  canvas.fillRoundRect(0, Y_STATUS, 8 * strlen(tmp) + 6, 16, 3, COL_SEL);
+  canvas.setTextColor(TFT_WHITE, COL_SEL);
+  canvas.drawString(tmp, 3, Y_STATUS);
+  int x = 8 * strlen(tmp) + 12;
   uint32_t total = snap.rx.packets + snap.rx.lost;
   int lossPct = total ? (int)(100.0f * snap.rx.lost / total + 0.5f) : 0;
-  if (snap.rx.packets == 0) {
+  if (!snap.linkUp) {
+    // 受信中の局がいない: 一度も受信していないか、全局が途絶えた
     canvas.setTextColor(COL_WARN, COL_BG);
-    canvas.drawString("NO LINK", 0, Y_STATUS);
-  } else if (!snap.linkUp) {
-    canvas.setTextColor(COL_WARN, COL_BG);
-    snprintf(tmp, sizeof(tmp), "LOST %lus", (unsigned long)((snap.nowMs - snap.rx.lastRxMs) / 1000));
-    canvas.drawString(tmp, 0, Y_STATUS);
+    if (snap.rx.packets == 0) snprintf(tmp, sizeof(tmp), "NO SIGNAL");
+    else snprintf(tmp, sizeof(tmp), "LOST %lus", (unsigned long)((snap.nowMs - snap.rx.lastRxMs) / 1000));
+    canvas.drawString(tmp, x, Y_STATUS);
   } else {
     canvas.setTextColor(COL_LABEL, COL_BG);
-    snprintf(tmp, sizeof(tmp), "%ddBm  loss %d%%  R%lu W%lu", snap.rssi, lossPct, (unsigned long)snap.rx.resyncs,
+    // 2 局以上いるときは局数を先頭に (x2 など)
+    if (snap.stations > 1) {
+      snprintf(tmp, sizeof(tmp), "x%d ", snap.stations);
+      canvas.drawString(tmp, x, Y_STATUS);
+      x += canvas.textWidth(tmp);
+    }
+    snprintf(tmp, sizeof(tmp), "%ddBm L%d%% R%lu W%lu", snap.rssi, lossPct, (unsigned long)snap.rx.resyncs,
              (unsigned long)snap.rx.watchdogs);
-    canvas.drawString(tmp, 0, Y_STATUS);
+    canvas.drawString(tmp, x, Y_STATUS);
   }
   drawBattery(bat);
   if (sleepInSec >= 0) {
@@ -330,6 +341,21 @@ void drawMain(const Control& c, const Snapshot& snap, const Battery& bat, int sl
   drawKeyLamp(Y_TX_LABEL, snap.localDown, COL_TX);
   drawText(txText, TX_ROWS, Y_TX_TEXT, COL_TX);
 
+  // チャンネル切り替え直後は番号を大きく表示する
+  if (showChannel) {
+    constexpr int BW = 150, BH = 70;
+    int bx = (W - BW) / 2, by = (H - BH) / 2 + 8;
+    canvas.fillRoundRect(bx, by, BW, BH, 10, COL_SEL);
+    canvas.drawRoundRect(bx, by, BW, BH, 10, TFT_WHITE);
+    canvas.setFont(&fonts::Font4);
+    canvas.setTextSize(2);
+    canvas.setTextColor(TFT_WHITE, COL_SEL);
+    canvas.setTextDatum(textdatum_t::middle_center);
+    snprintf(tmp, sizeof(tmp), "CH %u", s.channel);
+    canvas.drawString(tmp, W / 2, by + BH / 2 + 2);
+    canvas.setTextDatum(textdatum_t::top_left);
+  }
+
   canvas.pushSprite(0, 0);
 }
 
@@ -340,7 +366,7 @@ void drawSettings(const Settings& s, Item selected, const Battery& bat) {
   canvas.setTextColor(TFT_WHITE, COL_BG);
   canvas.drawString("SETTINGS", 0, 0);
   canvas.setTextColor(COL_DIM, COL_BG);
-  canvas.drawString("KEY1 hold: exit", 72, 0);
+  canvas.drawString("hold KEY: exit", 72, 0);
   drawBattery(bat);
 
   for (int i = 0; i < (int)Item::Count; i++) {

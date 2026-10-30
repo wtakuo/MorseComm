@@ -13,7 +13,7 @@ constexpr size_t PKT_HEADER_SIZE = 13;
 constexpr size_t PKT_MAX_SIZE = PKT_HEADER_SIZE + 2 * cfg::HIST_MAX;
 
 struct Packet {
-  uint8_t group = 0;
+  uint8_t channel = 0;  // 通信チャンネル (同じ値の局どうしだけが受理する)
   uint8_t state = 0;     // 1=DOWN, 0=UP
   uint16_t pktSeq = 0;
   uint16_t lastTid = 0;  // 最新の遷移ID
@@ -39,7 +39,7 @@ inline size_t encodePacket(const Packet& pk, uint8_t* buf, size_t cap) {
   if (cap < len) return 0;
   buf[0] = PKT_MAGIC;
   buf[1] = PKT_VERSION;
-  buf[2] = pk.group;
+  buf[2] = pk.channel;
   buf[3] = pk.state;
   put16(buf + 4, pk.pktSeq);
   put16(buf + 6, pk.lastTid);
@@ -49,14 +49,14 @@ inline size_t encodePacket(const Packet& pk, uint8_t* buf, size_t cap) {
   return len;
 }
 
-// デコード。形式不正なら false (グループIDの判定は呼び出し側)
+// デコード。形式不正なら false (チャンネルの判定は呼び出し側)
 inline bool decodePacket(const uint8_t* buf, size_t len, Packet& pk) {
   if (len < PKT_HEADER_SIZE) return false;
   if (buf[0] != PKT_MAGIC || buf[1] != PKT_VERSION) return false;
   if (buf[3] > 1) return false;
   uint8_t n = buf[12];
   if (n > cfg::HIST_MAX || len < PKT_HEADER_SIZE + 2 * (size_t)n) return false;
-  pk.group = buf[2];
+  pk.channel = buf[2];
   pk.state = buf[3];
   pk.pktSeq = get16(buf + 4);
   pk.lastTid = get16(buf + 6);
@@ -86,8 +86,8 @@ class TxHistory {
     return true;
   }
 
-  void build(Packet& pk, uint32_t nowMs, int nHist, uint8_t group, uint16_t pktSeq) const {
-    pk.group = group;
+  void build(Packet& pk, uint32_t nowMs, int nHist, uint8_t channel, uint16_t pktSeq) const {
+    pk.channel = channel;
     pk.state = state_;
     pk.pktSeq = pktSeq;
     pk.lastTid = lastTid_;

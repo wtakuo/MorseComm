@@ -35,8 +35,9 @@ TouchEvent pollTouch(bool settingsScreen);
 Battery readBattery();
 bool touchAvailable();
 
-// sleepInSec >= 0 のとき、スリープまでの残り秒数を表示する
-void drawMain(const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec);
+// sleepInSec >= 0 のとき、スリープまでの残り秒数を表示する。showChannel のときチャンネル番号を大きく表示する
+void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec,
+              bool showChannel);
 void drawSettings(const Settings& s, Item selected, const Battery& bat);
 
 }  // namespace ui

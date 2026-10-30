@@ -5,6 +5,7 @@
 #include "config.h"
 #include "protocol.h"
 #include "morse_decoder.h"
+#include "peers.h"
 #include "tone_out.h"
 
 namespace engine {
@@ -23,8 +24,8 @@ cw::IambicKeyer iambic;
 cw::TextKeyer textKeyer;
 cw::TxHistory hist;
 cw::TxScheduler sched;
-cw::Receiver rx;
-cw::MorseDecoder decLocal, decRemote;
+cw::PeerTable peers;
+cw::MorseDecoder decLocal;
 
 Settings set;
 Control ctl;
@@ -33,9 +34,8 @@ bool logOn = false;
 
 uint16_t pktSeq = 0;
 uint32_t txPackets = 0, injectedDrops = 0;
-int8_t lastRssi = 0;
 uint8_t localState = 0;
-uint32_t localLastMs = 0, remoteLastMs = 0;
+uint32_t localLastMs = 0;
 uint32_t lastSnapshotMs = 0;
 uint32_t lastActivityMs = 0;
 
@@ -53,7 +53,7 @@ void preview(uint16_t hz, uint32_t now) {
 // トーン: 自局 (サイドトーン) と受信再生の OR。周波数は自局優先
 void updateTone(uint32_t now) {
   bool side = localState && set.sideOn;
-  bool remote = rx.state();
+  bool remote = peers.anyDown();
   bool prev = previewHz && (int32_t)(now - previewUntil) < 0;
   if (!prev) previewHz = 0;
   if (!side && !remote && !prev) {
@@ -83,7 +83,7 @@ void applySettings(uint32_t now, bool modeChanged) {
   iambic.setWpm(set.wpm);
   iambic.setModeB(set.mode == (uint8_t)cw::KeyMode::IambicB);
   toneOut.setVolume(set.volume);
-  rx.setDelay(set.jitterMs);
+  peers.setDelay(set.jitterMs);
   if (modeChanged) {
     iambic.reset();
     setLocal(0, now);
@@ -111,6 +111,7 @@ void syncShared(uint32_t now) {
 
   if (sChanged) {
     applySettings(now, set.mode != oldMode);
+    if (set.channel != oldSet.channel) peers.clear();  // 別チャンネルの局の再生は打ち切る
     // 音に関わる設定を変えたら、その音を短く鳴らして確認できるようにする
     if (set.sideHz != oldSet.sideHz || (set.sideOn && !oldSet.sideOn)) preview(set.sideHz, now);
     else if (set.rxHz != oldSet.rxHz || set.volume != oldSet.volume) preview(set.rxHz, now);
@@ -147,7 +148,7 @@ void readKeys(uint32_t now) {
 void transmit(uint32_t now) {
   if (!sched.poll(now)) return;
   cw::Packet p;
-  hist.build(p, now, cfg::HIST_N, cfg::GROUP_ID, pktSeq++);
+  hist.build(p, now, cfg::HIST_N, set.channel, pktSeq++);
   txPackets++;
   bool drop = (ctl.lossPct && (esp_random() % 100) < ctl.lossPct) || (ctl.dropUp && p.state == 0);
   if (drop) {
@@ -163,17 +164,29 @@ void receive(uint32_t now) {
   net::RxItem item;
   while (net::receive(item)) {
     cw::Packet p;
-    if (!cw::decodePacket(item.data, item.len, p) || p.group != cfg::GROUP_ID) continue;
-    lastRssi = item.rssi;
-    rx.onPacket(p, item.rxMs);
+    if (!cw::decodePacket(item.data, item.len, p) || p.channel != set.channel) continue;
+    int idx;
+    cw::Peer& peer = peers.get(item.src, item.rxMs, idx);
+    peer.rssi = item.rssi;
+    peer.lastRxMs = item.rxMs;
+    peer.rx.onPacket(p, item.rxMs);
   }
-  rx.update(now);
-  cw::PlayedEvent ev;
-  while (rx.pop(ev)) {
-    decRemote.onTransition(ev.state, ev.playMs);
-    if (logOn) out(OutItem{OutItem::LogRemote, 0, ev.state, (uint8_t)ev.kind, ev.playMs, ev.playMs - remoteLastMs});
-    remoteLastMs = ev.playMs;
-    lastActivityMs = now;
+  for (int i = 0; i < cw::PeerTable::MAX; i++) {
+    cw::Peer& peer = peers.at(i);
+    if (!peer.used) continue;
+    peer.rx.update(now);
+    cw::PlayedEvent ev;
+    while (peer.rx.pop(ev)) {
+      peer.dec.onTransition(ev.state, ev.playMs);
+      if (logOn) {
+        OutItem it{OutItem::LogRemote, 0, ev.state, (uint8_t)ev.kind, ev.playMs, ev.playMs - peer.lastEventMs};
+        it.peer = (uint8_t)i;
+        out(it);
+      }
+      peer.lastEventMs = ev.playMs;
+      peer.lastPlayMs = now;
+      lastActivityMs = now;
+    }
   }
 }
 
@@ -181,23 +194,34 @@ void decode(uint32_t now) {
   char c;
   decLocal.update(now);
   while (decLocal.pop(c)) out(OutItem{OutItem::CharTx, c, 0, 0, now, 0});
-  decRemote.update(now);
-  while (decRemote.pop(c)) out(OutItem{OutItem::CharRx, c, 0, 0, now, 0});
+  for (int i = 0; i < cw::PeerTable::MAX; i++) {
+    cw::Peer& peer = peers.at(i);
+    if (!peer.used) continue;
+    peer.dec.update(now);
+    while (peer.dec.pop(c)) {
+      OutItem it{OutItem::CharRx, c, 0, 0, now, 0};
+      it.peer = (uint8_t)i;
+      out(it);
+    }
+  }
 }
 
 void publishSnapshot(uint32_t now) {
   if (now - lastSnapshotMs < SNAPSHOT_INTERVAL_MS) return;
   lastSnapshotMs = now;
   Snapshot s;
-  s.rx = rx.stats();
+  s.rx = peers.totalStats();
   s.net = net::stats();
-  s.offset = rx.offset();
-  s.rssi = lastRssi;
-  s.linkUp = rx.linkUp(now);
+  if (const cw::Peer* p = peers.latestRx()) {
+    s.offset = p->rx.offset();
+    s.rssi = p->rssi;
+  }
+  if (const cw::Peer* p = peers.latestPlay()) s.remoteWpm = p->dec.wpm();
+  s.stations = peers.activeCount(now);
+  s.linkUp = s.stations > 0;
   s.localDown = localState;
-  s.remoteDown = rx.state();
+  s.remoteDown = peers.anyDown();
   s.localWpm = decLocal.wpm();
-  s.remoteWpm = decRemote.wpm();
   s.txPackets = txPackets;
   s.injectedDrops = injectedDrops;
   s.lastActivityMs = lastActivityMs;

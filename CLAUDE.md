@@ -56,6 +56,8 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   net_espnow.h/.cpp     # ESP-NOW 送受信ラッパ (ハード依存)
   ui.h/.cpp             # 画面 (メイン/設定)・ボタン・タッチ・電池表示 (ハード依存)
   power.h/.cpp          # USB 給電検出・ディープスリープ (ハード依存)
+  peers.h               # 複数局の受信: 送信元 MAC ごとの Receiver + デコーダ、全局 OR (Arduino非依存)
+  tools/ser.sh          # シリアルへのコマンド送信と出力取得
   README.md             # 使い方・シリアルコマンド・仕組み (ユーザー向け)
 test/
   host/                 # Mac上で g++ でビルドするユニットテスト・損失シミュレーション
@@ -90,7 +92,7 @@ test/
 offset size field
  0     1   magic      = 0xC7
  1     1   version    = 1
- 2     1   group      // 同一グループIDのみ受理 (他のESP-NOWトラフィックや他局の混信を除外)
+ 2     1   channel    // 通信チャンネル 1..10。同じ値の局どうしだけが受理する (旧 group。2026-10-30 に変更)
  3     1   state      // 現在のキー状態: 1=DOWN, 0=UP
  4     2   pktSeq     // パケット通番 (統計用: ロス率測定)
  6     2   lastTid    // 最新の遷移ID (遷移ごとに +1、wrap あり)
@@ -108,7 +110,8 @@ offset size field
 
 ### 4.4 ESP-NOW の扱い
 - Wi-Fi は STA モード、**チャンネルは固定** (両機で同一。既定 1)。ルータには接続しない
-- 初期実装は **ブロードキャスト (FF:FF:FF:FF:FF:FF) + `group` ID** で良い
+- **ブロードキャスト (FF:FF:FF:FF:FF:FF) + パケット内の `channel`** で実装済み。受信側は送信元 MAC ごとに
+  Receiver/デコーダを持つ (peers.h, 最大 6 局) ので、同じチャンネルなら 3 台以上でも通信できる
   (ブロードキャストは MAC レベルの ACK/再送がないため、本方式のロス耐性の検証に適している)
 - 将来的にユニキャスト (MAC指定) やボタンによるペアリングへ拡張できる構造にしておく
 - 送信コールバックの成否は統計として記録するが、**プロトコルの正しさは ACK に依存させない**
@@ -257,7 +260,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 
 ## 13. 作業状況と再開メモ (2026-10-30 時点)
 
-### 実装済み (すべて実機で確認済み、ホストテスト 85 件合格、git にコミット済み)
+### 実装済み (すべて実機で確認済み、ホストテスト 93 件合格、git にコミット済み)
 - §4 の通信方式どおり: 状態+遷移履歴の定期送信、tid による重複/逆順対応、再同期、ジッタバッファ (150ms)、
   時刻オフセット = 直近 4 秒の (rx - tx) 最小値、ウォッチドッグ (再生時間軸で「最新パケットの送信時刻 + 100ms」を
   越えて DOWN なら強制 UP。同じ tid で DOWN のパケットが来たら REASSERT で再開)
@@ -270,16 +273,20 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - 画面 (ユーザー要望で改訂済み):
   - メイン画面: 最上段にリンク状態 (dBm・loss・R再同期・Wウォッチドッグ、Font2)、右端に電池 % (+充電中)。
     RX 3 行 (緑) / TX 2 行 (黄)、文字は Font0 x2
-  - 設定画面: KEY1 短押しで入る。項目はタッチまたは KEY1(次)/KEY2(前) で選び、右側のタッチ [+]/[-] で変更
-    (押し続けで連続)。KEY1 長押し または 30 秒無操作で抜けて保存。
-    項目: MODE / SPEED / SIDETONE / SIDE FREQ / RX FREQ / VOLUME / PADDLE
-  - メイン画面で KEY1 長押し = テキスト消去
+  - メイン画面のボタン (2026-10-30 にユーザー指示で変更): KEY1 短押し = チャンネル +1 (循環)、KEY1 長押し = チャンネル -1、
+    KEY2 短押し = 設定画面、KEY2 長押し = テキスト消去。チャンネル切り替え時は中央に "CH n" を 1.2 秒大きく表示
+  - 最上段: [CHn] x局数(2局以上) dBm L% R W ... 電池
+  - 設定画面: KEY2 短押しで入る。項目はタッチまたは KEY1(次)/KEY2(前) で選び、右側のタッチ [+]/[-] で変更
+    (押し続けで連続)。KEY1/KEY2 長押し または 30 秒無操作で抜けて保存。
+    項目: MODE / SPEED / SIDETONE / SIDE FREQ / RX FREQ / VOLUME / PADDLE (チャンネルは設定画面に無い)
 - デコード: 解読できない符号は CHAR_UNKNOWN (0x01) として出し、画面では赤い '?'。
   略符号は morse_table.h の prosignTable (現在 `...-.-` → "[SK]" のみ。AR/BT は + / = のままで良いとユーザー確認済み)
 - オートスリープ: 電池運用時 (VIN_DETECT=LOW)、キー・ボタン/タッチ・受信の遷移がどれも 3 分間なければ
   ディープスリープ (画面消灯)。10 秒前から "SLEEP in Ns" を表示。KEY1/KEY2 で復帰 (再起動、押したボタンは無視)。
   USB 給電中は眠らない。ユーザーが電池で動作確認済み
-- シリアルコマンド: mode / wpm / side N|on|off / rxtone / vol / swap / jitter / test on [TEXT] (`[SK]` で文字間なし送信) /
+- チャンネル: パケットの channel バイト (1..10, config.h の CH_*)。Preferences に保存。切り替えると受信中の全局を忘れる。
+  実機 2 台で、同チャンネルのみ受信・別チャンネルは受信しないことを確認済み。3 局以上はホストテストのみ (実機 2 台しかない)
+- シリアルコマンド: ch N / mode / wpm / side N|on|off / rxtone / vol / swap / jitter / test on [TEXT] (`[SK]` で文字間なし送信) /
   test off / loss N / dropup 0|1 / log 0|1 / stats / show / clear / save / sleep / help (README に一覧)
 - 設定は Preferences (名前空間 "morse") に保存。現在の実機設定: 101 = IAMBIC_B, 1101 = STRAIGHT
 
@@ -295,7 +302,33 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - UP のパケットが全部落ちる極端な条件では、語末の要素がウォッチドッグぶん長くなる (例: dit 60→141ms)。仕様上の限界
 - 距離を離した実運用: ユーザーが「少し離れたところ」で問題なく通信できることを確認済み。遠距離での統計 (R/W 回数) を
   見てジッタ遅延 150ms を調整する余地あり
-- 3 台以上・ペアリング (ユニキャスト) は未対応 (ブロードキャスト + group ID)
+- ペアリング (ユニキャスト) は未対応 (ブロードキャスト + channel で十分という判断)
 - 同時 DOWN 時の音の区別 (2 音同時発音) は未対応
 - スリープまでの時間は config.h の定数のみ (設定画面には無い)
+
+## 14. 他機種への移植: M5Stack Tab5 (保留中, 2026-10-30)
+
+ユーザーの要望: Tab5 (https://docs.m5stack.com/en/core/Tab5) でも使えるようにしたい。広い画面・物理ボタンなし (タッチ操作)、
+キーは Grove ポート (4番ピン = GPIO54, 3番ピン = GPIO53。ユーザー申告)、スピーカーに加えてヘッドセット端子も使いたい。
+Tab5 にはバッテリーが付いていない (バッテリーテストは後日)。
+
+**ESP-NOW が使えないため保留** (ユーザー判断)。調査結果:
+- Tab5 のメイン MCU は ESP32-P4 (無線なし、revision v1.0 → ボード設定 ChipVariant = "Before v3.00")。
+  無線は内蔵 ESP32-C6 コプロセッサを esp-hosted (SDIO) 経由で使う
+- FQBN: `esp32:esp32:m5stack_tab5:USBMode=hwcdc,CDCOnBoot=cdc` (USB シリアルを使うために必要)。
+  variant: SDA=53/SCL=54 (= Grove)、パーティション既定 6.5MB アプリ
+- Arduino コア 3.3.12 の P4 ライブラリ (esp_hosted 2.12.13, esp_wifi_remote 1.6.4) には esp_now_* の実装が無い
+  (ヘッダだけ)。Arduino の ESP_NOW サンプルも `CONFIG_SOC_WIFI_SUPPORTED` 必須
+- Tab5 内蔵 C6 のファームは esp-hosted **1.4.1** (`esp_hosted_get_coprocessor_fwversion` で確認)。Wi-Fi STA は動作
+- 回避策 (未実施): C6 を ESP-NOW 拡張入りの esp-hosted 2.x に書き換え、P4 側で esp_now_* を CustomRpc
+  (`esp_hosted_send_custom_data` / `esp_hosted_register_custom_callback`, 2.12.13 に存在) で転送するシム実装。
+  参考: ESPHome PR https://github.com/esphome/esphome/pull/17712 (Tab5 で検証済み)、
+  https://github.com/esphome/esp-hosted-firmware 、https://github.com/tymorton/esp32-p4-c6-espnow-enabler 。
+  公式対応は https://github.com/espressif/esp-hosted-mcu/issues/19 (未対応)。
+  リスク: 1.4.1 からの C6 OTA が通るか不明 (失敗時は P4 ブートローダを書き換える手段しかない)
+- 別案: 外付けの ESP32 モジュールを UART ブリッジにする (追加購入が必要)
+- 再開時は、ユーザーにどの方式で進めるかを確認すること
+- 注意: Tab5 には調査用の小さなスケッチを書き込んだ (工場出荷のデモは消えている。M5Burner 等で戻せる)
+- 移植時の構成方針 (案): ロジック部 (protocol/jitter/keyer/decoder/peers) はそのまま共有し、ハード依存部
+  (tone_out, net, ui, power, ピン) をボードごとに `#if defined(ARDUINO_NESSO_N1)` / `ARDUINO_M5STACK_TAB5` で切り替える
 

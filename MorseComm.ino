@@ -40,6 +40,7 @@ uint32_t lastSettingsOpMs = 0;
 ui::Battery battery;
 bool saveDirty = false;
 uint32_t lastChangeMs = 0, lastUiMs = 0, lastBtnMs = 0, lastStatsMs = 0, lastBatteryMs = 0;
+uint32_t chOverlayUntil = 0;  // この時刻までチャンネル番号を大きく表示する
 uint32_t lastInputMs = 0;  // ボタン・タッチ・シリアル入力、USB 給電中
 bool usbPower = true;
 char lineBuf[96];
@@ -59,6 +60,7 @@ Settings clampSettings(Settings s) {
   s.sideOn = s.sideOn ? 1 : 0;
   if (s.volume > ToneOut::VOLUME_MAX) s.volume = ToneOut::VOLUME_MAX;
   if (s.jitterMs > 1000) s.jitterMs = 1000;
+  if (s.channel < cfg::CH_MIN || s.channel > cfg::CH_MAX) s.channel = cfg::CH_DEFAULT;
   s.swap = s.swap ? 1 : 0;
   return s;
 }
@@ -74,6 +76,7 @@ void loadSettings() {
   s.volume = prefs.getUChar("vol", s.volume);
   s.swap = prefs.getUChar("swap", s.swap);
   s.jitterMs = prefs.getUShort("jitter", s.jitterMs);
+  s.channel = prefs.getUChar("ch", s.channel);
   prefs.end();
   g_settings = clampSettings(s);
   g_settingsVer++;
@@ -92,6 +95,7 @@ void saveSettings() {
   prefs.putUChar("vol", s.volume);
   prefs.putUChar("swap", s.swap);
   prefs.putUShort("jitter", s.jitterMs);
+  prefs.putUChar("ch", s.channel);
   prefs.end();
   saveDirty = false;
   Serial.println("settings saved");
@@ -123,8 +127,8 @@ void printSettings() {
   Control c = g_control;
   unlockShared();
   Serial.printf(
-      "mode=%s wpm=%u side=%s,%uHz rx=%uHz vol=%u swap=%u jitter=%ums | test=%s \"%s\" loss=%u%% dropup=%u log=%u\n",
-      cw::keyModeName((cw::KeyMode)s.mode), s.wpm, s.sideOn ? "on" : "off", s.sideHz, s.rxHz, s.volume, s.swap,
+      "ch=%u mode=%s wpm=%u side=%s,%uHz rx=%uHz vol=%u swap=%u jitter=%ums | test=%s \"%s\" loss=%u%% dropup=%u log=%u\n",
+      s.channel, cw::keyModeName((cw::KeyMode)s.mode), s.wpm, s.sideOn ? "on" : "off", s.sideHz, s.rxHz, s.volume, s.swap,
       s.jitterMs,
                 c.testOn ? "on" : "off", c.testText, c.lossPct, c.dropUp, g_logOn);
 }
@@ -136,21 +140,23 @@ void printStats() {
   uint32_t total = sn.rx.packets + sn.rx.lost;
   Serial.printf(
       "STATS rx=%u lost=%u (%.1f%%) stale=%u resync=%u late=%u wd=%u reassert=%u restart=%u rssi=%d offset=%ld "
-      "link=%u bat=%d%%%s heap=%u/%u | tx=%u injDrop=%u sent=%u sendErr=%u cbFail=%u rxQDrop=%u\n",
+      "link=%u stations=%d bat=%d%%%s heap=%u/%u | tx=%u injDrop=%u sent=%u sendErr=%u cbFail=%u rxQDrop=%u\n",
       sn.rx.packets, sn.rx.lost, total ? 100.0 * sn.rx.lost / total : 0.0, sn.rx.stale, sn.rx.resyncs, sn.rx.late,
-      sn.rx.watchdogs, sn.rx.reasserts, sn.rx.restarts, sn.rssi, (long)sn.offset, sn.linkUp, battery.valid ? battery.percent : -1,
+      sn.rx.watchdogs, sn.rx.reasserts, sn.rx.restarts, sn.rssi, (long)sn.offset, sn.linkUp, sn.stations, battery.valid ? battery.percent : -1,
       battery.charging ? "(chg)" : "", ESP.getFreeHeap(), ESP.getMinFreeHeap(), sn.txPackets,
       sn.injectedDrops, sn.net.sent, sn.net.sendErr, sn.net.cbFail, sn.net.rxDropped);
 }
 
 void printHelp() {
-  Serial.println(
+  Serial.printf(
       "commands:\n"
+      "  ch N  (通信チャンネル %d-%d)\n"
       "  mode straight|iambic_a|iambic_b   wpm N   vol 0-5   swap 0|1   jitter N\n"
       "  side N|on|off  (サイドトーン周波数 / ON・OFF)   rxtone N  (受信トーン周波数)\n"
       "  test on [TEXT] | test off          (TEXT を現在の WPM で自動キーイング)\n"
-      "  loss N   (送信を N% 省略)   dropup 0|1 (UP のパケットを省略)\n"
-      "  log 0|1  (遷移ログと定期統計)   stats   show   clear   help");
+      "  loss N   (送信を N%% 省略)   dropup 0|1 (UP のパケットを省略)\n"
+      "  log 0|1  (遷移ログと定期統計)   stats   show   clear   sleep   help\n",
+      cfg::CH_MIN, cfg::CH_MAX);
 }
 
 // ---- スリープ ----
@@ -203,6 +209,8 @@ void handleCommand(char* line) {
     editSettings([&](Settings& s) { s.volume = n; });
   } else if (!strcmp(cmd, "swap") && arg) {
     editSettings([&](Settings& s) { s.swap = n; });
+  } else if (!strcmp(cmd, "ch") && arg) {
+    editSettings([&](Settings& s) { s.channel = n; });
   } else if (!strcmp(cmd, "jitter") && arg) {
     editSettings([&](Settings& s) { s.jitterMs = n; });
   } else if (!strcmp(cmd, "test") && arg) {
@@ -283,6 +291,13 @@ void adjustSelected(int dir) {
   });
 }
 
+// チャンネルを 1 つ進める/戻す (CH_MIN..CH_MAX で循環)
+void stepChannel(int dir, uint32_t now) {
+  const int n = cfg::CH_MAX - cfg::CH_MIN + 1;
+  editSettings([&](Settings& s) { s.channel = cfg::CH_MIN + (s.channel - cfg::CH_MIN + n + dir) % n; });
+  chOverlayUntil = now + cfg::CH_OVERLAY_MS;
+}
+
 void enterSettings(bool on, uint32_t now) {
   settingsScreen = on;
   lastSettingsOpMs = now;
@@ -302,14 +317,20 @@ void pollInput(uint32_t now) {
   if (g_logOn && t.kind != ui::TouchEvent::None) Serial.printf("touch x=%d y=%d kind=%d\n", t.x, t.y, t.kind);
 
   if (!settingsScreen) {
-    if (b == ui::Button::Key1Short) enterSettings(true, now);
-    else if (b == ui::Button::Key1Long) ui::clearText();
+    switch (b) {
+      case ui::Button::Key1Short: stepChannel(+1, now); break;
+      case ui::Button::Key1Long: stepChannel(-1, now); break;
+      case ui::Button::Key2Short: enterSettings(true, now); break;
+      case ui::Button::Key2Long: ui::clearText(); break;
+      default: break;
+    }
     return;
   }
   switch (b) {
     case ui::Button::Key1Short: selected = (ui::Item)(((int)selected + 1) % count); break;
     case ui::Button::Key2Short: selected = (ui::Item)(((int)selected + count - 1) % count); break;
-    case ui::Button::Key1Long: enterSettings(false, now); return;
+    case ui::Button::Key1Long:
+    case ui::Button::Key2Long: enterSettings(false, now); return;
     default: break;
   }
   switch (t.kind) {
@@ -349,8 +370,8 @@ void drainOutput() {
                       (unsigned long)it.dur);
         break;
       case OutItem::LogRemote:
-        Serial.printf("RX %c t=%lu prev%c=%lu%s\n", it.state ? 'D' : 'U', (unsigned long)it.t, it.state ? 'U' : 'D',
-                      (unsigned long)it.dur, eventKindName(it.eventKind));
+        Serial.printf("RX %c t=%lu prev%c=%lu%s p%u\n", it.state ? 'D' : 'U', (unsigned long)it.t, it.state ? 'U' : 'D',
+                      (unsigned long)it.dur, eventKindName(it.eventKind), it.peer);
         break;
     }
   }
@@ -396,7 +417,7 @@ void loop() {
     if (remain != -1 && remain <= 0) goToSleep();
     int sleepIn = (remain >= 0 && remain <= (int32_t)cfg::SLEEP_WARN_MS) ? (remain + 999) / 1000 : -1;
     if (settingsScreen) ui::drawSettings(s, selected, battery);
-    else ui::drawMain(c, sn, battery, sleepIn);
+    else ui::drawMain(s, c, sn, battery, sleepIn, (int32_t)(now - chOverlayUntil) < 0);
   }
   if (saveDirty && !settingsScreen && now - lastChangeMs >= SAVE_DELAY_MS) saveSettings();
   if (g_logOn && now - lastStatsMs >= STATS_INTERVAL_MS) {
