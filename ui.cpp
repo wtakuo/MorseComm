@@ -1,5 +1,5 @@
 #include "ui.h"
-#include <Arduino_Nesso_N1.h>
+#include <Arduino.h>
 #include <string.h>
 
 namespace ui {
@@ -31,12 +31,9 @@ constexpr uint16_t COL_OFF = 0x2104;     // キー表示の消灯色
 constexpr uint16_t COL_SEL = 0x04DF;     // 選択中の項目の背景
 constexpr uint16_t COL_BTN = 0x31A6;     // タッチボタン
 constexpr uint16_t COL_WARN = 0xF9E7;    // 赤
+constexpr uint16_t COL_EDIT = 0xFB20;    // 変更中の項目の背景 (橙)
 
-NessoDisplay display;
-NessoTouch touch;
-NessoBattery battery;
-LGFX_Sprite canvas(&display);
-bool touchOk = false;
+LGFX_Sprite canvas;
 
 // 末尾を保持するテキストバッファ (あふれたら 1 行ぶんまとめて捨てて折り返し位置を保つ)
 struct TextBuf {
@@ -159,45 +156,24 @@ void drawTouchButton(int y, const char* sym) {
   canvas.setTextDatum(textdatum_t::top_left);
 }
 
-// タッチの生座標 → 画面座標
-void mapTouch(int16_t rx, int16_t ry, int16_t& x, int16_t& y) {
-  int16_t a = rx, b = ry;
-  int16_t aMax = 134, bMax = 239;  // パネル縦置きの範囲
-  if (cfg::TOUCH_SWAP_XY) {
-    int16_t t = a;
-    a = b;
-    b = t;
-    t = aMax;
-    aMax = bMax;
-    bMax = t;
-  }
-  if (cfg::TOUCH_INVERT_X) a = aMax - a;
-  if (cfg::TOUCH_INVERT_Y) b = bMax - b;
-  x = a;
-  y = b;
-}
+void present() { canvas.pushSprite(&hw::display(), 0, 0); }
 
 }  // namespace
 
 void begin() {
-  display.begin();
-  display.setRotation(1);
-  display.fillScreen(COL_BG);
+  hw::begin();
+  hw::display().fillScreen(COL_BG);
   canvas.setColorDepth(16);
   canvas.createSprite(W, H);
-  touchOk = touch.begin();
   // 起動時 (スリープからの復帰を含む) に押されているボタンは、離してもイベントにしない
-  bool raw[2] = {digitalRead(KEY1) == LOW, digitalRead(KEY2) == LOW};
   for (int i = 0; i < 2; i++) {
-    btn[i].down = raw[i];
-    btn[i].longFired = raw[i];
+    bool raw = hw::button(i);
+    btn[i].down = raw;
+    btn[i].longFired = raw;
   }
 }
 
-void sleepDisplay() {
-  display.fillScreen(COL_BG);
-  display.sleep();
-}
+void sleepDisplay() { hw::displaySleep(); }
 
 void addChar(bool rx, char c) { (rx ? rxText : txText).add(c); }
 
@@ -207,7 +183,7 @@ void clearText() {
 }
 
 Button pollButtons(uint32_t nowMs) {
-  bool raw[2] = {digitalRead(KEY1) == LOW, digitalRead(KEY2) == LOW};
+  bool raw[2] = {hw::button(0), hw::button(1)};
   Button result = Button::None;
   for (int i = 0; i < 2; i++) {
     BtnState& b = btn[i];
@@ -228,14 +204,11 @@ Button pollButtons(uint32_t nowMs) {
 
 TouchEvent pollTouch(bool settingsScreen) {
   TouchEvent ev;
-  if (!touchOk) return ev;
-  int16_t rx, ry;
-  if (!touch.read(rx, ry)) {
+  if (!hw::touch(ev.x, ev.y)) {
     touchState.down = false;
     return ev;
   }
   uint32_t now = millis();
-  mapTouch(rx, ry, ev.x, ev.y);
   if (!settingsScreen) {
     touchState.down = true;
     return ev;
@@ -262,19 +235,9 @@ TouchEvent pollTouch(bool settingsScreen) {
   return ev;
 }
 
-bool touchAvailable() { return touchOk; }
+bool touchAvailable() { return hw::hasTouch(); }
 
-Battery readBattery() {
-  Battery b;
-  uint16_t pct = battery.getChargeLevel();
-  if (pct <= 100) {
-    b.valid = true;
-    b.percent = pct;
-    NessoBattery::ChargeStatus st = battery.getChargeStatus();
-    b.charging = st == NessoBattery::PRE_CHARGE || st == NessoBattery::CHARGING;
-  }
-  return b;
-}
+Battery readBattery() { return hw::battery(); }
 
 void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec,
               bool showChannel) {
@@ -356,36 +319,51 @@ void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const B
     canvas.setTextDatum(textdatum_t::top_left);
   }
 
-  canvas.pushSprite(0, 0);
+  present();
 }
 
-void drawSettings(const Settings& s, Item selected, const Battery& bat) {
-  char tmp[24];
+void drawSettings(const Settings& s, Item selected, bool editing, const Battery& bat) {
+  char tmp[32];
+  bool touch = hw::hasTouch();
+  int listW = touch ? LIST_W : W;  // タッチの無いボードは右側の +/- ボタンを描かない
   canvas.fillScreen(COL_BG);
   useLabelFont();
-  canvas.setTextColor(TFT_WHITE, COL_BG);
-  canvas.drawString("SETTINGS", 0, 0);
-  canvas.setTextColor(COL_DIM, COL_BG);
-  canvas.drawString("hold KEY: exit", 72, 0);
+  if (touch) {
+    canvas.setTextColor(TFT_WHITE, COL_BG);
+    canvas.drawString("SETTINGS", 0, 0);
+    canvas.setTextColor(COL_DIM, COL_BG);
+    canvas.drawString("hold KEY: exit", 72, 0);
+  } else {
+    // ボタンの役割を表示 (A = 正面, B = 側面)
+    canvas.setTextColor(editing ? COL_EDIT : COL_DIM, COL_BG);
+    canvas.drawString(editing ? "A:+  B:-  hold:done" : "A:next  B:edit  hold:exit", 0, 0);
+  }
   drawBattery(bat);
 
   for (int i = 0; i < (int)Item::Count; i++) {
     Item it = (Item)i;
     int y = ROW_Y0 + i * ROW_H;
     bool sel = it == selected;
-    uint16_t bg = sel ? COL_SEL : COL_BG;
-    if (sel) canvas.fillRect(0, y, LIST_W, ROW_H, bg);
+    uint16_t bg = !sel ? COL_BG : editing ? COL_EDIT : COL_SEL;
+    if (sel) canvas.fillRect(0, y, listW, ROW_H, bg);
     canvas.setTextColor(sel ? TFT_WHITE : COL_LABEL, bg);
     canvas.drawString(itemLabel(it), 3, y + 1);
     itemValue(s, it, tmp, sizeof(tmp));
+    if (sel && editing) {
+      char t2[28];
+      snprintf(t2, sizeof(t2), "- %s +", tmp);
+      strcpy(tmp, t2);
+    }
     canvas.setTextColor(TFT_WHITE, bg);
     canvas.setTextDatum(textdatum_t::top_right);
-    canvas.drawString(tmp, LIST_W - 3, y + 1);
+    canvas.drawString(tmp, listW - 3, y + 1);
     canvas.setTextDatum(textdatum_t::top_left);
   }
-  drawTouchButton(BTN_PLUS_Y, "+");
-  drawTouchButton(BTN_MINUS_Y, "-");
-  canvas.pushSprite(0, 0);
+  if (touch) {
+    drawTouchButton(BTN_PLUS_Y, "+");
+    drawTouchButton(BTN_MINUS_Y, "-");
+  }
+  present();
 }
 
 }  // namespace ui

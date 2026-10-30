@@ -1,8 +1,9 @@
-// ui.h — 画面表示・ボタン・タッチ・電池 (Nesso N1: ST7789 240x135, KEY1/KEY2 と電池ゲージは I2C)
+// ui.h — 画面表示とボタン・タッチ入力 (240x135 の横長画面。ボードの違いは hw.h が吸収する)
 // I2C を使うので loop() 側からのみ呼ぶこと。
 #pragma once
 #include <stdint.h>
 #include "shared.h"
+#include "hw.h"
 
 namespace ui {
 
@@ -17,11 +18,7 @@ struct TouchEvent {
   int16_t x = 0, y = 0;
 };
 
-struct Battery {
-  bool valid = false;
-  int percent = 0;
-  bool charging = false;
-};
+using Battery = hw::Battery;
 
 void begin();
 // 画面を消す (スリープ前)
@@ -38,6 +35,7 @@ bool touchAvailable();
 // sleepInSec >= 0 のとき、スリープまでの残り秒数を表示する。showChannel のときチャンネル番号を大きく表示する
 void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec,
               bool showChannel);
-void drawSettings(const Settings& s, Item selected, const Battery& bat);
+// editing: タッチの無いボードで、選択中の項目の値を変更中 (ボタンが +/- になる)
+void drawSettings(const Settings& s, Item selected, bool editing, const Battery& bat);
 
 }  // namespace ui

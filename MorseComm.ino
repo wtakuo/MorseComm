@@ -1,4 +1,4 @@
-// MorseComm — ESP-NOW による CW (モールス) キーイング伝送 (Arduino Nesso N1 x2)
+// MorseComm — ESP-NOW による CW (モールス) キーイング伝送 (Arduino Nesso N1 / M5StickS3)
 //
 // 構成:
 //   cwTask (engine.cpp, 1ms 周期, 高優先度): キー入力・キーヤー・送信・受信再生・トーン・デコード
@@ -6,6 +6,7 @@
 // 詳細は CLAUDE.md / README.md を参照。
 #include <Arduino.h>
 #include <Preferences.h>
+#include "board.h"
 #include "config.h"
 #include "shared.h"
 #include "engine.h"
@@ -36,6 +37,7 @@ constexpr uint32_t SETTINGS_TIMEOUT_MS = 30000;  // 設定画面を無操作で�
 Preferences prefs;
 ui::Item selected = ui::Item::Mode;
 bool settingsScreen = false;
+bool editing = false;  // タッチの無いボード: 選択中の項目の値を変更中
 uint32_t lastSettingsOpMs = 0;
 ui::Battery battery;
 bool saveDirty = false;
@@ -271,9 +273,15 @@ void pollSerial() {
 }
 
 // ---- ボタン・タッチ ----
-// メイン画面:  KEY1 短押し = 設定画面へ / KEY1 長押し = 表示テキストを消去
-// 設定画面:    KEY1 短押し = 次の項目 / KEY2 短押し = 前の項目 / KEY1 長押し = 終了 (保存)
+// KEY1 = 正面ボタン (StickS3: BtnA), KEY2 = 側面ボタン (StickS3: BtnB)
+// メイン画面:  KEY1 短押し = チャンネル +1 / KEY1 長押し = チャンネル -1
+//              KEY2 短押し = 設定画面へ / KEY2 長押し = 表示テキストを消去
+// 設定画面 (タッチあり: Nesso N1):
+//              KEY1 短押し = 次の項目 / KEY2 短押し = 前の項目 / 長押し = 終了 (保存)
 //              項目をタッチして選択、右側の [+] [-] をタッチして値を変更 (押し続けで連続変更)
+// 設定画面 (タッチなし: StickS3):
+//   選択中:    KEY1 短押し = 次の項目 / KEY2 短押し = 変更を始める / 長押し = 終了 (保存)
+//   変更中:    KEY1 短押し = + / KEY2 短押し = - / 長押し = 変更を終える
 void adjustSelected(int dir) {
   editSettings([&](Settings& s) {
     switch (selected) {
@@ -300,6 +308,7 @@ void stepChannel(int dir, uint32_t now) {
 
 void enterSettings(bool on, uint32_t now) {
   settingsScreen = on;
+  editing = false;
   lastSettingsOpMs = now;
   if (!on && saveDirty) saveSettings();
   lastUiMs = 0;  // すぐ描き直す
@@ -326,6 +335,23 @@ void pollInput(uint32_t now) {
     }
     return;
   }
+  if (now - lastSettingsOpMs >= SETTINGS_TIMEOUT_MS) {
+    enterSettings(false, now);
+    return;
+  }
+  bool longPress = b == ui::Button::Key1Long || b == ui::Button::Key2Long;
+  if (!ui::touchAvailable()) {
+    if (editing) {
+      if (b == ui::Button::Key1Short) adjustSelected(+1);
+      else if (b == ui::Button::Key2Short) adjustSelected(-1);
+      else if (longPress) editing = false;
+    } else {
+      if (b == ui::Button::Key1Short) selected = (ui::Item)(((int)selected + 1) % count);
+      else if (b == ui::Button::Key2Short) editing = true;
+      else if (longPress) enterSettings(false, now);
+    }
+    return;
+  }
   switch (b) {
     case ui::Button::Key1Short: selected = (ui::Item)(((int)selected + 1) % count); break;
     case ui::Button::Key2Short: selected = (ui::Item)(((int)selected + count - 1) % count); break;
@@ -339,7 +365,6 @@ void pollInput(uint32_t now) {
     case ui::TouchEvent::Minus: adjustSelected(-1); break;
     default: break;
   }
-  if (now - lastSettingsOpMs >= SETTINGS_TIMEOUT_MS) enterSettings(false, now);
 }
 
 // ---- cwTask からの出力 ----
@@ -387,7 +412,7 @@ void setup() {
   bool ok = engine::begin();
   uint8_t mac[6];
   net::ownMac(mac);
-  Serial.printf("MorseComm start: MAC %02X:%02X:%02X:%02X:%02X:%02X espnow=%s\n", mac[0], mac[1], mac[2], mac[3],
+  Serial.printf("MorseComm start (%s): MAC %02X:%02X:%02X:%02X:%02X:%02X espnow=%s\n", board::NAME, mac[0], mac[1], mac[2], mac[3],
                 mac[4], mac[5], ok ? "ok" : "FAILED");
   printSettings();
 }
@@ -416,7 +441,7 @@ void loop() {
     int32_t remain = sleepRemainingMs(now, sn);
     if (remain != -1 && remain <= 0) goToSleep();
     int sleepIn = (remain >= 0 && remain <= (int32_t)cfg::SLEEP_WARN_MS) ? (remain + 999) / 1000 : -1;
-    if (settingsScreen) ui::drawSettings(s, selected, battery);
+    if (settingsScreen) ui::drawSettings(s, selected, editing, battery);
     else ui::drawMain(s, c, sn, battery, sleepIn, (int32_t)(now - chOverlayUntil) < 0);
   }
   if (saveDirty && !settingsScreen && now - lastChangeMs >= SAVE_DELAY_MS) saveSettings();

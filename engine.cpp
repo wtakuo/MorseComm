@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <esp_random.h>
 #include <string.h>
+#include "board.h"
 #include "config.h"
 #include "protocol.h"
 #include "morse_decoder.h"
@@ -133,12 +134,12 @@ void readKeys(uint32_t now) {
     return;
   }
   if (set.mode == (uint8_t)cw::KeyMode::Straight) {
-    bool k = dbStraight.update(digitalRead(cfg::PIN_STRAIGHT) == LOW, now);
+    bool k = dbStraight.update(digitalRead(board::PIN_STRAIGHT) == LOW, now);
     if (dbStraight.takeChanged()) setLocal(k, dbStraight.lastChangeMs());
     return;
   }
-  bool a = dbDit.update(digitalRead(cfg::PIN_PADDLE_DIT) == LOW, now);
-  bool b = dbDah.update(digitalRead(cfg::PIN_PADDLE_DAH) == LOW, now);
+  bool a = dbDit.update(digitalRead(board::PIN_PADDLE_DIT) == LOW, now);
+  bool b = dbDah.update(digitalRead(board::PIN_PADDLE_DAH) == LOW, now);
   if (set.swap) iambic.update(now, b, a);
   else iambic.update(now, a, b);
   cw::KeyEvent ev;
@@ -250,10 +251,10 @@ void task(void*) {
 
 bool begin() {
   outQ = xQueueCreate(OUT_QUEUE_LEN, sizeof(OutItem));
-  pinMode(cfg::PIN_STRAIGHT, INPUT_PULLUP);
-  pinMode(cfg::PIN_PADDLE_DIT, INPUT_PULLUP);
-  pinMode(cfg::PIN_PADDLE_DAH, INPUT_PULLUP);
-  toneOut.begin(cfg::PIN_BUZZER, cfg::SIDE_HZ_DEFAULT);
+  pinMode(board::PIN_STRAIGHT, INPUT_PULLUP);
+  pinMode(board::PIN_PADDLE_DIT, INPUT_PULLUP);
+  pinMode(board::PIN_PADDLE_DAH, INPUT_PULLUP);
+  toneOut.begin(cfg::SIDE_HZ_DEFAULT);
   curHz = cfg::SIDE_HZ_DEFAULT;
   hist = cw::TxHistory((uint16_t)esp_random());
   pktSeq = (uint16_t)esp_random();

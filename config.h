@@ -1,17 +1,11 @@
-// config.h — ピン割り当てと既定パラメータ
+// config.h — 既定パラメータ (ボード共通)
 // Arduino 非依存 (ホストテストからも include する) にしておくこと。
 #pragma once
 #include <stdint.h>
 
 namespace cfg {
 
-// ---- ピン (Arduino Nesso N1) ----
-// Grove ポート: GPIO5 = GROVE_IO_0, GPIO4 = GROVE_IO_1 (variants/arduino_nesso_n1/pins_arduino.h)
-constexpr int PIN_STRAIGHT = 4;     // ストレートキー
-constexpr int PIN_PADDLE_DIT = 4;   // パドル DIT (swap 設定で DAH と入れ替え可能)
-constexpr int PIN_PADDLE_DAH = 5;   // パドル DAH
-constexpr int PIN_BUZZER = 11;      // 内蔵ブザー (BEEP_PIN)
-// キー入力はアクティブ Low (INPUT_PULLUP, キー閉 = LOW)
+// ピンなどボード固有の定数は board.h とボードごとの .cpp にある
 
 // ---- キー入力 ----
 constexpr uint32_t DEBOUNCE_MS = 4;   // ロックアウト型デバウンス
@@ -29,11 +23,6 @@ constexpr int TONE_HZ_MAX = 1500;
 constexpr int TONE_STEP_HZ = 50;
 constexpr int VOLUME_DEFAULT = 3;
 constexpr uint32_t TONE_PREVIEW_MS = 150;  // 設定変更時の試聴音の長さ
-
-// ---- タッチパネル (FT6336, 生座標はパネル縦置き 135x240) → 画面 (setRotation(1), 240x135) ----
-constexpr bool TOUCH_SWAP_XY = true;
-constexpr bool TOUCH_INVERT_X = false;  // 入れ替え後の x を反転
-constexpr bool TOUCH_INVERT_Y = true;   // 入れ替え後の y を反転
 
 // ---- 電源 ----
 constexpr uint32_t SLEEP_TIMEOUT_MS = 180000;  // 電池運用時、無操作・無受信でこの時間経つとスリープ
