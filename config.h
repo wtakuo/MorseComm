@@ -53,7 +53,7 @@ constexpr uint8_t ESPNOW_CHANNEL = 1;   // Wi-Fi のチャンネル (全局共�
 // ---- LoRa (920MHz 帯 特定小電力無線局 20mW 以下。ARIB STD-T108 / 無線設備規則) ----
 // キャリアセンス 5ms 以上の区分を使う: 1 回の送信 4 秒以下、送信後の休止 50ms 以上、1 時間あたりの総和制限なし。
 // 帯域 500kHz は単位チャネル (200kHz) 3 つの結束。通信チャンネル n の中心周波数 = BASE + STEP * (n - 1)
-// (n=1: 920.6/920.8/921.0 MHz の結束 → 中心 920.8MHz, n=10: 926.2MHz)
+// (n=1: 920.6/920.8/921.0 MHz の結束 → 中心 920.8MHz, n=8: 925.0MHz)
 constexpr float LORA_FREQ_BASE_MHZ = 920.8f;
 constexpr float LORA_FREQ_STEP_MHZ = 0.6f;
 constexpr float LORA_BW_KHZ = 500.0f;
@@ -75,7 +75,7 @@ constexpr uint32_t LORA_JITTER_DELAY_MS = 250;   // 送信間隔が約 60ms と�
 
 // ---- 通信チャンネル (無線機の「チャンネル」に相当。パケットに載せ、同じ値の局どうしだけが通信する) ----
 constexpr uint8_t CH_MIN = 1;
-constexpr uint8_t CH_MAX = 10;
+constexpr uint8_t CH_MAX = 8;
 constexpr uint8_t CH_DEFAULT = 1;
 constexpr uint32_t CH_OVERLAY_MS = 1200;  // チャンネル切り替え時に大きく表示する時間
 constexpr int MAX_PEERS = 6;              // 同時に受信を追跡できる局の数

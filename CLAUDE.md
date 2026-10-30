@@ -98,7 +98,7 @@ test/
 offset size field
  0     1   magic      = 0xC7
  1     1   version    = 1
- 2     1   channel    // 通信チャンネル 1..10。同じ値の局どうしだけが受理する (旧 group。2026-10-30 に変更)
+ 2     1   channel    // 通信チャンネル 1..8。同じ値の局どうしだけが受理する (旧 group。2026-10-30 に変更)
  3     1   state      // 現在のキー状態: 1=DOWN, 0=UP
  4     2   pktSeq     // パケット通番 (統計用: ロス率測定)
  6     2   lastTid    // 最新の遷移ID (遷移ごとに +1、wrap あり)
@@ -143,7 +143,7 @@ offset size field
   単位チャネル 200kHz (中心 920.6 + 0.2k MHz)、最大 5 チャネル結束。**5ms の区分を使う** (総和の管理が要らない)。
   キャリアセンスレベル -80dBm (給電線入力点) は記憶による値で、原文では未確認
 - **パラメータ (config.h の LORA_*):** SF5 / BW500kHz (単位チャネル 3 つの結束) / CR4/5 / 13dBm / プリアンブル 8 /
-  sync 0x12 / TCXO 3.0V。チャンネル n の中心 = 920.8 + 0.6(n-1) MHz (CH1..CH10 = 920.8..926.2)。
+  sync 0x12 / TCXO 3.0V。チャンネル n の中心 = 920.8 + 0.6(n-1) MHz (CH1..CH8 = 920.8..925.0)。
   キャリアセンス 5.2ms、休止 52ms (余裕を持たせた値)
 - **送信:** engine は ESP-NOW と同じく 20ms ごと (遷移時は即時) にパケットを `net::send` に置く。LoRa タスクは
   休止とキャリアセンスが明けた時点の最新の 1 個だけを送り、送信直前に `restampPacket` で txMs と age を付け替え、
@@ -342,7 +342,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - オートスリープ: 電池運用時 (VIN_DETECT=LOW)、キー・ボタン/タッチ・受信の遷移がどれも 3 分間なければ
   ディープスリープ (画面消灯)。10 秒前から "SLEEP in Ns" を表示。KEY1/KEY2 で復帰 (再起動、押したボタンは無視)。
   USB 給電中は眠らない。ユーザーが電池で動作確認済み
-- チャンネル: パケットの channel バイト (1..10, config.h の CH_*)。Preferences に保存。切り替えると受信中の全局を忘れる。
+- チャンネル: パケットの channel バイト (1..8, config.h の CH_*。2026-10-30 にユーザー指示で 10 → 8)。Preferences に保存。切り替えると受信中の全局を忘れる。
   実機 2 台で、同チャンネルのみ受信・別チャンネルは受信しないことを確認済み。3 局以上はホストテストのみ (実機 2 台しかない)
 - シリアルコマンド: ch N / mode / wpm / side N|on|off / rxtone / vol / swap / jitter / test on [TEXT] (`[SK]` で文字間なし送信) /
   test off / loss N / dropup 0|1 / log 0|1 / stats / show / clear / save / sleep / help (README に一覧)
