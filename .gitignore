@@ -1,0 +1,4 @@
+build/
+test/host/bin/
+*.o
+.DS_Store
