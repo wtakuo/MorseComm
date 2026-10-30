@@ -133,10 +133,10 @@ void printStats() {
   uint32_t total = sn.rx.packets + sn.rx.lost;
   Serial.printf(
       "STATS rx=%u lost=%u (%.1f%%) stale=%u resync=%u late=%u wd=%u reassert=%u restart=%u rssi=%d offset=%ld "
-      "link=%u bat=%d%%%s | tx=%u injDrop=%u sent=%u sendErr=%u cbFail=%u rxQDrop=%u\n",
+      "link=%u bat=%d%%%s heap=%u/%u | tx=%u injDrop=%u sent=%u sendErr=%u cbFail=%u rxQDrop=%u\n",
       sn.rx.packets, sn.rx.lost, total ? 100.0 * sn.rx.lost / total : 0.0, sn.rx.stale, sn.rx.resyncs, sn.rx.late,
       sn.rx.watchdogs, sn.rx.reasserts, sn.rx.restarts, sn.rssi, (long)sn.offset, sn.linkUp, battery.valid ? battery.percent : -1,
-      battery.charging ? "(chg)" : "", sn.txPackets,
+      battery.charging ? "(chg)" : "", ESP.getFreeHeap(), ESP.getMinFreeHeap(), sn.txPackets,
       sn.injectedDrops, sn.net.sent, sn.net.sendErr, sn.net.cbFail, sn.net.rxDropped);
 }
 
