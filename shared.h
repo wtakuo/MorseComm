@@ -39,6 +39,7 @@ struct Snapshot {
   int remoteWpm = 0;   // 相手デコーダの推定 WPM
   uint32_t txPackets = 0;
   uint32_t injectedDrops = 0;
+  uint32_t lastActivityMs = 0;  // 最後に自局・相手局のキー遷移があった時刻
   uint32_t nowMs = 0;
 };
 

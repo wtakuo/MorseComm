@@ -37,6 +37,7 @@ int8_t lastRssi = 0;
 uint8_t localState = 0;
 uint32_t localLastMs = 0, remoteLastMs = 0;
 uint32_t lastSnapshotMs = 0;
+uint32_t lastActivityMs = 0;
 
 uint16_t curHz = 0;
 uint16_t previewHz = 0;
@@ -75,6 +76,7 @@ void setLocal(uint8_t st, uint32_t t) {
   if (logOn) out(OutItem{OutItem::LogLocal, 0, st, 0, t, t - localLastMs});
   localLastMs = t;
   localState = st;
+  lastActivityMs = millis();
 }
 
 void applySettings(uint32_t now, bool modeChanged) {
@@ -171,6 +173,7 @@ void receive(uint32_t now) {
     decRemote.onTransition(ev.state, ev.playMs);
     if (logOn) out(OutItem{OutItem::LogRemote, 0, ev.state, (uint8_t)ev.kind, ev.playMs, ev.playMs - remoteLastMs});
     remoteLastMs = ev.playMs;
+    lastActivityMs = now;
   }
 }
 
@@ -197,6 +200,7 @@ void publishSnapshot(uint32_t now) {
   s.remoteWpm = decRemote.wpm();
   s.txPackets = txPackets;
   s.injectedDrops = injectedDrops;
+  s.lastActivityMs = lastActivityMs;
   s.nowMs = now;
   lockShared();
   g_snapshot = s;

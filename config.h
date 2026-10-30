@@ -35,6 +35,10 @@ constexpr bool TOUCH_SWAP_XY = true;
 constexpr bool TOUCH_INVERT_X = false;  // 入れ替え後の x を反転
 constexpr bool TOUCH_INVERT_Y = true;   // 入れ替え後の y を反転
 
+// ---- 電源 ----
+constexpr uint32_t SLEEP_TIMEOUT_MS = 180000;  // 電池運用時、無操作・無受信でこの時間経つとスリープ
+constexpr uint32_t SLEEP_WARN_MS = 10000;      // スリープ前に予告を表示する時間
+
 // ---- 送信スケジュール (§4.2) ----
 constexpr uint32_t TX_INTERVAL_ACTIVE_MS = 20;   // DOWN 中と UP 後しばらくの送信間隔
 constexpr uint32_t TX_ACTIVE_HOLD_MS = 500;      // UP 後にアクティブ間隔を続ける時間

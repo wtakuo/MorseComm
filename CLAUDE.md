@@ -216,6 +216,9 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - キー・パドルの接続ピン: ストレート = GPIO4。パドル = GPIO4 / GPIO5 (DIT/DAH の対応は要確認。`swap 1` で入れ替え)
 - トーン出力の方法とピン: 内蔵ブザー `BEEP_PIN` = GPIO11 を LEDC PWM で駆動 (音量はデューティ比で5段階)。サイドトーンと受信トーンは別周波数、自局 DOWN 時はサイドトーン優先
 - タッチ: FT6x36 (0x38, `NessoTouch`)。生座標 (縦置き 135x240) → setRotation(1) の画面座標は「xy 入れ替え + y 反転」で正しいことを実機で確認 (config.h の TOUCH_*)
+- 電源: USB 給電は `digitalRead(VIN_DETECT)` (エキスパンダ 0x44 bit5) が HIGH (USB 接続時に確認。電池時に LOW になることは要確認)。
+  ディープスリープからの復帰: KEY1/KEY2 (0x43 bit0/1) の割り込みを有効化 (0x11 = 0xFC) → エキスパンダの INT が
+  `SYS_IRQ` = GPIO3 (通常 High) → `esp_sleep_enable_ext1_wakeup_io(1<<3, ANY_LOW)`。実機で復帰を確認 (wake cause = EXT1)
 - 電池: `NessoBattery::getChargeLevel()` (BQ27220) で残量 %。`battery.begin()` は充電設定を書き換えるので呼んでいない
 - シリアル: USB CDC (115200)。`arduino-cli monitor` はパイプ経由だと何も出ないため、
   `stty -f PORT 115200 raw` + `cat` で読む

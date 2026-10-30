@@ -172,6 +172,17 @@ void begin() {
   canvas.setColorDepth(16);
   canvas.createSprite(W, H);
   touchOk = touch.begin();
+  // 起動時 (スリープからの復帰を含む) に押されているボタンは、離してもイベントにしない
+  bool raw[2] = {digitalRead(KEY1) == LOW, digitalRead(KEY2) == LOW};
+  for (int i = 0; i < 2; i++) {
+    btn[i].down = raw[i];
+    btn[i].longFired = raw[i];
+  }
+}
+
+void sleepDisplay() {
+  display.fillScreen(COL_BG);
+  display.sleep();
 }
 
 void addChar(bool rx, char c) { (rx ? rxText : txText).add(c); }
@@ -251,7 +262,7 @@ Battery readBattery() {
   return b;
 }
 
-void drawMain(const Control& c, const Snapshot& snap, const Battery& bat) {
+void drawMain(const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec) {
   char tmp[48];
   canvas.fillScreen(COL_BG);
   useLabelFont();
@@ -273,6 +284,12 @@ void drawMain(const Control& c, const Snapshot& snap, const Battery& bat) {
     canvas.drawString(tmp, 0, Y_STATUS);
   }
   drawBattery(bat);
+  if (sleepInSec >= 0) {
+    canvas.fillRect(0, Y_STATUS, 170, 16, COL_BG);
+    canvas.setTextColor(COL_WARN, COL_BG);
+    snprintf(tmp, sizeof(tmp), "SLEEP in %ds", sleepInSec);
+    canvas.drawString(tmp, 0, Y_STATUS);
+  }
 
   // 受信
   useLabelFont();

@@ -11,6 +11,7 @@
 #include "engine.h"
 #include "ui.h"
 #include "tone_out.h"
+#include "power.h"
 
 // ---- 共有データ (shared.h) ----
 static portMUX_TYPE sharedMux = portMUX_INITIALIZER_UNLOCKED;
@@ -39,6 +40,8 @@ uint32_t lastSettingsOpMs = 0;
 ui::Battery battery;
 bool saveDirty = false;
 uint32_t lastChangeMs = 0, lastUiMs = 0, lastBtnMs = 0, lastStatsMs = 0, lastBatteryMs = 0;
+uint32_t lastInputMs = 0;  // ボタン・タッチ・シリアル入力、USB 給電中
+bool usbPower = true;
 char lineBuf[96];
 int lineLen = 0;
 
@@ -150,6 +153,26 @@ void printHelp() {
       "  log 0|1  (遷移ログと定期統計)   stats   show   clear   help");
 }
 
+// ---- スリープ ----
+void goToSleep() {
+  Serial.println("going to sleep (wake: KEY1/KEY2)");
+  if (saveDirty) saveSettings();
+  ui::sleepDisplay();
+  if (!power::enterDeepSleep()) {
+    Serial.println("sleep aborted: button interrupt pending");
+    ESP.restart();  // 画面を消してしまったので起動し直す
+  }
+}
+
+// スリープまでの残り時間 (ms)。スリープしない状況では -1
+int32_t sleepRemainingMs(uint32_t now, const Snapshot& sn) {
+  if (usbPower) return -1;
+  uint32_t last = lastInputMs;
+  if ((int32_t)(sn.lastActivityMs - last) > 0) last = sn.lastActivityMs;
+  int32_t idle = (int32_t)(now - last);
+  return (int32_t)cfg::SLEEP_TIMEOUT_MS - idle;
+}
+
 // ---- シリアルコマンド ----
 void handleCommand(char* line) {
   char* cmd = strtok(line, " \t");
@@ -204,7 +227,11 @@ void handleCommand(char* line) {
   } else if (!strcmp(cmd, "stats")) {
     printStats();
     return;
+  } else if (!strcmp(cmd, "sleep")) {
+    goToSleep();
+    return;
   } else if (!strcmp(cmd, "show")) {
+    power::printStatus();
     Serial.printf("touch=%s\n", ui::touchAvailable() ? "ok" : "not found");
   } else if (!strcmp(cmd, "clear")) {
     ui::clearText();
@@ -215,6 +242,7 @@ void handleCommand(char* line) {
     printHelp();
     return;
   }
+  if (power::wokeFromSleep()) Serial.println("woke from sleep");
   printSettings();
 }
 
@@ -224,6 +252,7 @@ void pollSerial() {
     if (ch == '\r' || ch == '\n') {
       if (lineLen) {
         lineBuf[lineLen] = 0;
+        lastInputMs = millis();
         handleCommand(lineBuf);
         lineLen = 0;
       }
@@ -266,6 +295,7 @@ void pollInput(uint32_t now) {
   ui::Button b = ui::pollButtons(now);
   ui::TouchEvent t = ui::pollTouch(settingsScreen);
   if (b != ui::Button::None || t.kind != ui::TouchEvent::None) {
+    lastInputMs = now;
     lastSettingsOpMs = now;
     lastUiMs = 0;
   }
@@ -348,7 +378,9 @@ void loop() {
   if (now - lastBatteryMs >= BATTERY_INTERVAL_MS || lastBatteryMs == 0) {
     lastBatteryMs = now;
     battery = ui::readBattery();
+    usbPower = power::usbPowered();
   }
+  if (usbPower) lastInputMs = now;  // USB 給電中は眠らない (電池に切り替わった時点から数える)
   if (now - lastUiMs >= UI_INTERVAL_MS) {
     lastUiMs = now;
     lockShared();
@@ -356,8 +388,11 @@ void loop() {
     Control c = g_control;
     Snapshot sn = g_snapshot;
     unlockShared();
+    int32_t remain = sleepRemainingMs(now, sn);
+    if (remain != -1 && remain <= 0) goToSleep();
+    int sleepIn = (remain >= 0 && remain <= (int32_t)cfg::SLEEP_WARN_MS) ? (remain + 999) / 1000 : -1;
     if (settingsScreen) ui::drawSettings(s, selected, battery);
-    else ui::drawMain(c, sn, battery);
+    else ui::drawMain(c, sn, battery, sleepIn);
   }
   if (saveDirty && !settingsScreen && now - lastChangeMs >= SAVE_DELAY_MS) saveSettings();
   if (g_logOn && now - lastStatsMs >= STATS_INTERVAL_MS) {

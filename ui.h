@@ -24,6 +24,8 @@ struct Battery {
 };
 
 void begin();
+// 画面を消す (スリープ前)
+void sleepDisplay();
 void addChar(bool rx, char c);
 void clearText();
 
@@ -33,7 +35,8 @@ TouchEvent pollTouch(bool settingsScreen);
 Battery readBattery();
 bool touchAvailable();
 
-void drawMain(const Control& c, const Snapshot& snap, const Battery& bat);
+// sleepInSec >= 0 のとき、スリープまでの残り秒数を表示する
+void drawMain(const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec);
 void drawSettings(const Settings& s, Item selected, const Battery& bat);
 
 }  // namespace ui
