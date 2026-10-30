@@ -17,10 +17,12 @@ NessoDisplay nessoDisplay;
 NessoTouch nessoTouch;
 NessoBattery nessoBattery;
 bool touchOk = false;
+SemaphoreHandle_t busMutex = nullptr;
 
 }  // namespace
 
 void begin() {
+  busMutex = xSemaphoreCreateMutex();
   nessoDisplay.begin();
   nessoDisplay.setRotation(1);
   touchOk = nessoTouch.begin();
@@ -64,8 +66,18 @@ Battery battery() {
 }
 
 void displaySleep() {
+  lockBus();
   nessoDisplay.fillScreen(TFT_BLACK);
   nessoDisplay.sleep();
+  unlockBus();
+}
+
+void lockBus() {
+  if (busMutex) xSemaphoreTake(busMutex, portMAX_DELAY);
+}
+
+void unlockBus() {
+  if (busMutex) xSemaphoreGive(busMutex);
 }
 
 }  // namespace hw

@@ -48,5 +48,8 @@ void displaySleep() {
   M5.Display.sleep();
 }
 
+void lockBus() {}
+void unlockBus() {}
+
 }  // namespace hw
 #endif

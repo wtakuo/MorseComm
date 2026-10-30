@@ -23,5 +23,9 @@ bool touch(int16_t& x, int16_t& y);
 Battery battery();
 // スリープ前に画面を消す
 void displaySleep();
+// 画面と共有している SPI バスの排他 (Nesso N1: 画面と LoRa が同じ SPI。別タスクから使うので必要)。
+// 画面に描く側も LoRa 側も、SPI を使う間はこれで囲む。StickS3 では何もしない
+void lockBus();
+void unlockBus();
 
 }  // namespace hw

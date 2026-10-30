@@ -7,8 +7,9 @@
 
 namespace ui {
 
-// 設定画面の項目
-enum class Item : uint8_t { Mode, Wpm, SideOn, SideHz, RxHz, Volume, Swap, Count };
+// 設定画面の項目 (Radio は LoRa のあるボードだけ。itemCount() を使うこと)
+enum class Item : uint8_t { Mode, Wpm, SideOn, SideHz, RxHz, Volume, Swap, Radio, Count };
+int itemCount();
 
 enum class Button : uint8_t { None, Key1Short, Key1Long, Key2Short, Key2Long };
 

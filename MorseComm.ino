@@ -1,4 +1,4 @@
-// MorseComm — ESP-NOW による CW (モールス) キーイング伝送 (Arduino Nesso N1 / M5StickS3)
+// MorseComm — ESP-NOW / LoRa による CW (モールス) キーイング伝送 (Arduino Nesso N1 / M5StickS3)
 //
 // 構成:
 //   cwTask (engine.cpp, 1ms 周期, 高優先度): キー入力・キーヤー・送信・受信再生・トーン・デコード
@@ -64,8 +64,22 @@ Settings clampSettings(Settings s) {
   if (s.jitterMs > 1000) s.jitterMs = 1000;
   if (s.channel < cfg::CH_MIN || s.channel > cfg::CH_MAX) s.channel = cfg::CH_DEFAULT;
   s.swap = s.swap ? 1 : 0;
+  if (s.radio != cfg::RADIO_LORA || !net::loraAvailable()) s.radio = cfg::RADIO_ESPNOW;
   return s;
 }
+
+// ジッタ遅延は無線の種類ごとに保存する (LoRa は送信間隔が長いので既定値も大きい)
+const char* jitterKey(uint8_t radio) { return radio == cfg::RADIO_LORA ? "ljitter" : "jitter"; }
+
+uint16_t storedJitter(uint8_t radio) {
+  prefs.begin("morse", true);
+  uint16_t v = prefs.getUShort(jitterKey(radio),
+                               radio == cfg::RADIO_LORA ? cfg::LORA_JITTER_DELAY_MS : cfg::JITTER_DELAY_MS);
+  prefs.end();
+  return v;
+}
+
+const char* radioName(uint8_t radio) { return radio == cfg::RADIO_LORA ? "lora" : "espnow"; }
 
 void loadSettings() {
   Settings s;
@@ -77,9 +91,11 @@ void loadSettings() {
   s.rxHz = prefs.getUShort("rxhz", s.rxHz);
   s.volume = prefs.getUChar("vol", s.volume);
   s.swap = prefs.getUChar("swap", s.swap);
-  s.jitterMs = prefs.getUShort("jitter", s.jitterMs);
   s.channel = prefs.getUChar("ch", s.channel);
+  s.radio = prefs.getUChar("radio", s.radio);
   prefs.end();
+  s = clampSettings(s);
+  s.jitterMs = storedJitter(s.radio);
   g_settings = clampSettings(s);
   g_settingsVer++;
 }
@@ -96,8 +112,9 @@ void saveSettings() {
   prefs.putUShort("rxhz", s.rxHz);
   prefs.putUChar("vol", s.volume);
   prefs.putUChar("swap", s.swap);
-  prefs.putUShort("jitter", s.jitterMs);
+  prefs.putUShort(jitterKey(s.radio), s.jitterMs);
   prefs.putUChar("ch", s.channel);
+  prefs.putUChar("radio", s.radio);
   prefs.end();
   saveDirty = false;
   Serial.println("settings saved");
@@ -129,10 +146,10 @@ void printSettings() {
   Control c = g_control;
   unlockShared();
   Serial.printf(
-      "ch=%u mode=%s wpm=%u side=%s,%uHz rx=%uHz vol=%u swap=%u jitter=%ums | test=%s \"%s\" loss=%u%% dropup=%u log=%u\n",
-      s.channel, cw::keyModeName((cw::KeyMode)s.mode), s.wpm, s.sideOn ? "on" : "off", s.sideHz, s.rxHz, s.volume, s.swap,
-      s.jitterMs,
-                c.testOn ? "on" : "off", c.testText, c.lossPct, c.dropUp, g_logOn);
+      "radio=%s ch=%u mode=%s wpm=%u side=%s,%uHz rx=%uHz vol=%u swap=%u jitter=%ums | test=%s \"%s\" loss=%u%% dropup=%u "
+      "log=%u\n",
+      radioName(s.radio), s.channel, cw::keyModeName((cw::KeyMode)s.mode), s.wpm, s.sideOn ? "on" : "off", s.sideHz,
+      s.rxHz, s.volume, s.swap, s.jitterMs, c.testOn ? "on" : "off", c.testText, c.lossPct, c.dropUp, g_logOn);
 }
 
 void printStats() {
@@ -142,17 +159,19 @@ void printStats() {
   uint32_t total = sn.rx.packets + sn.rx.lost;
   Serial.printf(
       "STATS rx=%u lost=%u (%.1f%%) stale=%u resync=%u late=%u wd=%u reassert=%u restart=%u rssi=%d offset=%ld "
-      "link=%u stations=%d bat=%d%%%s heap=%u/%u | tx=%u injDrop=%u sent=%u sendErr=%u cbFail=%u rxQDrop=%u\n",
+      "link=%u stations=%d bat=%d%%%s heap=%u/%u | %s tx=%u injDrop=%u sent=%u sendErr=%u cbFail=%u rxQDrop=%u rxErr=%u "
+      "csBusy=%u air=%ums\n",
       sn.rx.packets, sn.rx.lost, total ? 100.0 * sn.rx.lost / total : 0.0, sn.rx.stale, sn.rx.resyncs, sn.rx.late,
-      sn.rx.watchdogs, sn.rx.reasserts, sn.rx.restarts, sn.rssi, (long)sn.offset, sn.linkUp, sn.stations, battery.valid ? battery.percent : -1,
-      battery.charging ? "(chg)" : "", ESP.getFreeHeap(), ESP.getMinFreeHeap(), sn.txPackets,
-      sn.injectedDrops, sn.net.sent, sn.net.sendErr, sn.net.cbFail, sn.net.rxDropped);
+      sn.rx.watchdogs, sn.rx.reasserts, sn.rx.restarts, sn.rssi, (long)sn.offset, sn.linkUp, sn.stations,
+      battery.valid ? battery.percent : -1, battery.charging ? "(chg)" : "", ESP.getFreeHeap(), ESP.getMinFreeHeap(),
+      radioName(net::radio()), sn.txPackets, sn.injectedDrops, sn.net.sent, sn.net.sendErr, sn.net.cbFail,
+      sn.net.rxDropped, sn.net.rxErr, sn.net.csBusy, sn.net.airMs);
 }
 
 void printHelp() {
   Serial.printf(
       "commands:\n"
-      "  ch N  (通信チャンネル %d-%d)\n"
+      "  ch N  (通信チャンネル %d-%d)   radio espnow|lora  (無線の種類。切り替えると再起動)\n"
       "  mode straight|iambic_a|iambic_b   wpm N   vol 0-5   swap 0|1   jitter N\n"
       "  side N|on|off  (サイドトーン周波数 / ON・OFF)   rxtone N  (受信トーン周波数)\n"
       "  test on [TEXT] | test off          (TEXT を現在の WPM で自動キーイング)\n"
@@ -165,6 +184,7 @@ void printHelp() {
 void goToSleep() {
   Serial.println("going to sleep (wake: KEY1/KEY2)");
   if (saveDirty) saveSettings();
+  net::end();
   ui::sleepDisplay();
   if (!power::enterDeepSleep()) {
     Serial.println("sleep aborted: button interrupt pending");
@@ -179,6 +199,28 @@ int32_t sleepRemainingMs(uint32_t now, const Snapshot& sn) {
   if ((int32_t)(sn.lastActivityMs - last) > 0) last = sn.lastActivityMs;
   int32_t idle = (int32_t)(now - last);
   return (int32_t)cfg::SLEEP_TIMEOUT_MS - idle;
+}
+
+// 無線の種類を変える。jitter はその無線用に保存してあった値にする (反映は再起動で)
+void setRadio(uint8_t radio) {
+  uint16_t j = storedJitter(radio);
+  editSettings([&](Settings& s) {
+    s.radio = radio;
+    s.jitterMs = j;
+  });
+}
+
+// 設定された無線の種類が動作中のものと違えば、保存して再起動する
+void restartIfRadioChanged() {
+  lockShared();
+  uint8_t r = g_settings.radio;
+  unlockShared();
+  if (r == net::radio()) return;
+  Serial.printf("radio changed to %s: restarting\n", radioName(r));
+  saveSettings();
+  net::end();
+  delay(50);
+  ESP.restart();
 }
 
 // ---- シリアルコマンド ----
@@ -213,6 +255,14 @@ void handleCommand(char* line) {
     editSettings([&](Settings& s) { s.swap = n; });
   } else if (!strcmp(cmd, "ch") && arg) {
     editSettings([&](Settings& s) { s.channel = n; });
+  } else if (!strcmp(cmd, "radio") && arg) {
+    int r = !strcasecmp(arg, "espnow") ? cfg::RADIO_ESPNOW : !strcasecmp(arg, "lora") ? cfg::RADIO_LORA : -1;
+    if (r < 0 || (r == cfg::RADIO_LORA && !net::loraAvailable())) {
+      Serial.println(r < 0 ? "unknown radio" : "LoRa is not available on this board");
+      return;
+    }
+    setRadio(r);
+    restartIfRadioChanged();
   } else if (!strcmp(cmd, "jitter") && arg) {
     editSettings([&](Settings& s) { s.jitterMs = n; });
   } else if (!strcmp(cmd, "test") && arg) {
@@ -297,6 +347,7 @@ void adjustSelected(int dir) {
       default: break;
     }
   });
+  if (selected == ui::Item::Radio) setRadio(g_settings.radio == cfg::RADIO_LORA ? cfg::RADIO_ESPNOW : cfg::RADIO_LORA);
 }
 
 // チャンネルを 1 つ進める/戻す (CH_MIN..CH_MAX で循環)
@@ -311,11 +362,12 @@ void enterSettings(bool on, uint32_t now) {
   editing = false;
   lastSettingsOpMs = now;
   if (!on && saveDirty) saveSettings();
+  if (!on) restartIfRadioChanged();
   lastUiMs = 0;  // すぐ描き直す
 }
 
 void pollInput(uint32_t now) {
-  const int count = (int)ui::Item::Count;
+  const int count = ui::itemCount();
   ui::Button b = ui::pollButtons(now);
   ui::TouchEvent t = ui::pollTouch(settingsScreen);
   if (b != ui::Button::None || t.kind != ui::TouchEvent::None) {
@@ -412,8 +464,8 @@ void setup() {
   bool ok = engine::begin();
   uint8_t mac[6];
   net::ownMac(mac);
-  Serial.printf("MorseComm start (%s): MAC %02X:%02X:%02X:%02X:%02X:%02X espnow=%s\n", board::NAME, mac[0], mac[1], mac[2], mac[3],
-                mac[4], mac[5], ok ? "ok" : "FAILED");
+  Serial.printf("MorseComm start (%s): MAC %02X:%02X:%02X:%02X:%02X:%02X radio=%s %s\n", board::NAME, mac[0], mac[1],
+                mac[2], mac[3], mac[4], mac[5], radioName(net::radio()), ok ? "ok" : "FAILED");
   printSettings();
 }
 

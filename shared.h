@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "jitter.h"
 #include "keyer.h"
-#include "net_espnow.h"
+#include "net.h"
 
 // 永続化する設定 (Preferences)
 struct Settings {
@@ -17,6 +17,7 @@ struct Settings {
   uint8_t swap = 0;  // パドルの DIT/DAH 入れ替え
   uint16_t jitterMs = cfg::JITTER_DELAY_MS;
   uint8_t channel = cfg::CH_DEFAULT;  // 通信チャンネル
+  uint8_t radio = cfg::RADIO_ESPNOW;  // 無線の種類 (切り替えは再起動で反映する)
 };
 
 // 実行時の制御 (保存しない): テストモード・ロス注入
@@ -40,7 +41,7 @@ struct Snapshot {
   int localWpm = 0;    // 自局デコーダの推定 WPM
   int remoteWpm = 0;   // 最後に受信した局のデコーダの推定 WPM
   uint32_t txPackets = 0;
-  uint32_t injectedDrops = 0;
+  uint32_t injectedDrops = 0;  // ロス注入で送らなかったパケット
   uint32_t lastActivityMs = 0;  // 最後に自局・相手局のキー遷移があった時刻
   uint32_t nowMs = 0;
 };

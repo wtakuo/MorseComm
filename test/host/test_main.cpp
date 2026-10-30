@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <cmath>
 
 #include "../../protocol.h"
 #include "../../jitter.h"
@@ -92,6 +93,24 @@ static void testProtocolRoundTrip() {
   CHECK(p.stateOf(0) == 1 && p.stateOf(1) == 0 && p.stateOf(2) == 1, "stateOf");
   h.build(p, 1000 + 70000, cfg::HIST_N, 1, 6);
   CHECK(p.age[2] == 0xFFFF, "age saturates");
+
+  // 送信時刻の付け替え (LoRa): 1200 に組み立てたものを 1235 に送る = 1235 に組み立てたものと同じ
+  {
+    Packet a, b;
+    h.build(a, 1200, cfg::HIST_N, 1, 5);
+    h.build(b, 1235, cfg::HIST_N, 1, 5);
+    uint8_t ba[PKT_MAX_SIZE], bb[PKT_MAX_SIZE];
+    size_t la = encodePacket(a, ba, sizeof(ba)), lb = encodePacket(b, bb, sizeof(bb));
+    CHECK(restampPacket(ba, la, 1235), "restamp");
+    CHECK(la == lb && memcmp(ba, bb, la) == 0, "restamped == rebuilt");
+    h.build(a, 1000 + 65500, cfg::HIST_N, 1, 6);
+    la = encodePacket(a, ba, sizeof(ba));
+    CHECK(restampPacket(ba, la, 1000 + 65600), "restamp 2");
+    decodePacket(ba, la, q);
+    CHECK(q.txMs == 1000 + 65600 && q.age[0] == 65600 - 120 && q.age[2] == 0xFFFF, "restamp saturates");
+    CHECK(!restampPacket(ba, la, 1000), "time going back must fail");
+    CHECK(!restampPacket(ba, 5, 2000), "short packet must fail");
+  }
 }
 
 static void testScheduler() {
@@ -299,6 +318,11 @@ struct ChannelOpts {
   double driftPpm = 0;       // 送信側クロックの進み (ppm)
   uint32_t clockOffset = 0;  // 送受信の時計の差
   unsigned seed = 1;
+  // LoRa の送信条件: 組み立てたパケットは最新 1 個だけ保持し、前回の送信終了から休止 + キャリアセンス後に、
+  // 送信時刻を付け替えて送る (net_lora.cpp と同じ)。受信側のジッタ遅延・アイドル間隔も LoRa 用にする
+  bool lora = false;
+  int loraToaMs = 8;         // 送信時間 (SF5/BW500, 29 バイトで約 7.3ms)
+  int csBusyMax = 0;         // キャリアセンスで待たされる時間 0..csBusyMax ms
 };
 
 struct SimResult {
@@ -321,6 +345,16 @@ static SimResult simulate(const std::vector<Tr>& keying, uint32_t endMs, const C
   TxHistory hist(0xFFF0);  // wrap も試す
   TxScheduler sched;
   Receiver rx;
+  if (o.lora) {
+    rx.setDelay(cfg::LORA_JITTER_DELAY_MS);
+    sched.setIdleInterval(cfg::LORA_TX_INTERVAL_IDLE_MS);
+  }
+  std::vector<uint8_t> mailbox;  // LoRa: 送信待ちの最新パケット
+  uint32_t radioFreeAt = 0;      // LoRa: 次にキャリアセンスを始められる時刻
+  bool inCs = false;
+  uint32_t csEndAt = 0;
+  uint16_t loraSeq = 0;
+  std::uniform_int_distribution<int> CSB(0, o.csBusyMax);
   uint16_t seq = 0;
   int burstLeft = 0;
   size_t ki = 0;
@@ -340,11 +374,36 @@ static SimResult simulate(const std::vector<Tr>& keying, uint32_t endMs, const C
       }
       ki++;
     }
+    bool sendNow = false;
+    uint8_t buf[PKT_MAX_SIZE];
+    size_t len = 0;
+    Packet p;
     if (sched.poll(txClock)) {
-      Packet p;
       hist.build(p, txClock, cfg::HIST_N, 1, seq++);
-      uint8_t buf[PKT_MAX_SIZE];
-      size_t len = encodePacket(p, buf, sizeof(buf));
+      len = encodePacket(p, buf, sizeof(buf));
+      if (o.lora) mailbox.assign(buf, buf + len);
+      else sendNow = true;
+    }
+    uint32_t extraDelay = 0;
+    if (o.lora && !mailbox.empty() && !inCs && t >= radioFreeAt) {
+      // 休止明けにキャリアセンス (5ms + 混雑による待ち)
+      inCs = true;
+      csEndAt = t + (uint32_t)std::ceil(cfg::LORA_CS_US / 1000.0) + (o.csBusyMax ? CSB(rng) : 0);
+    }
+    if (o.lora && inCs && t >= csEndAt) {
+      // キャリアセンスが終わった時点の最新パケットを、送信開始時刻に付け替えて送る
+      inCs = false;
+      len = mailbox.size();
+      memcpy(buf, mailbox.data(), len);
+      mailbox.clear();
+      restampPacket(buf, len, txClock);
+      setPacketSeq(buf, loraSeq++);
+      decodePacket(buf, len, p);
+      extraDelay = o.loraToaMs;
+      radioFreeAt = t + o.loraToaMs + cfg::LORA_PAUSE_MS;
+      sendNow = true;
+    }
+    if (sendNow) {
       bool drop = U(rng) < o.loss;
       if (o.dropUp && p.state == 0) drop = true;
       if (burstLeft > 0) {
@@ -357,7 +416,7 @@ static SimResult simulate(const std::vector<Tr>& keying, uint32_t endMs, const C
       if (!drop) {
         int copies = U(rng) < o.dupProb ? 2 : 1;
         for (int c = 0; c < copies; c++) {
-          uint32_t delay = o.baseDelay + (o.jitterMax ? (uint32_t)(U(rng) * o.jitterMax) : 0);
+          uint32_t delay = extraDelay + o.baseDelay + (o.jitterMax ? (uint32_t)(U(rng) * o.jitterMax) : 0);
           flight.push_back({t + delay, std::vector<uint8_t>(buf, buf + len)});
         }
       }
@@ -443,8 +502,7 @@ static void testLossSim() {
   printf("[sim] loss / jitter / reorder\n");
   const uint32_t START = 2000, DUR = 60000, END = START + DUR + 3000;
   auto keying = sampleKeying(42, START, DUR, true);
-  // 遅延上限: jitter delay + watchdog + 送信間隔 + 余裕
-  const uint32_t STUCK_LIMIT = cfg::JITTER_DELAY_MS + cfg::WATCHDOG_MS + 100;
+  // 押しっぱなしの上限: jitter delay + watchdog + 送信間隔 + 余裕 (シナリオごとに下で決める)
 
   struct Sc {
     const char* name;
@@ -497,8 +555,35 @@ static void testLossSim() {
     scs.push_back({"jitter250", o, false, 0});
   }
 
+  // LoRa: 送信は約 60ms 間隔 (休止 50ms + キャリアセンス) が上限
+  for (double l : {0.0, 0.1, 0.3}) {
+    ChannelOpts o;
+    o.lora = true;
+    o.loss = l;
+    o.seed = 7 + (unsigned)(l * 100);
+        // 30% ロスでは 5 連続ロス (約 350ms 途絶) が時々起き、ウォッチドッグが働くので完全一致は求めない
+    scs.push_back({l == 0 ? "lora" : l == 0.1 ? "lora+loss10" : "lora+loss30", o, l < 0.2, 2});
+  }
+  {
+    ChannelOpts o;
+    o.lora = true;
+    o.loss = 0.1;
+    o.csBusyMax = 30;  // 他局の送信でキャリアセンスが待たされる
+    o.clockOffset = 0xFFFF0000u;
+    o.driftPpm = 200;
+    scs.push_back({"lora+loss10+csbusy", o, true, 2});
+  }
+  {
+    ChannelOpts o;
+    o.lora = true;
+    o.dropUp = true;
+    scs.push_back({"lora+dropUP", o, false, 0});
+  }
+
   for (auto& sc : scs) {
     SimResult r = simulate(keying, END, sc.o);
+    const uint32_t STUCK_LIMIT = sc.o.lora ? cfg::LORA_JITTER_DELAY_MS + cfg::WATCHDOG_MS + cfg::LORA_PAUSE_MS + 100
+                                           : cfg::JITTER_DELAY_MS + cfg::WATCHDOG_MS + 100;
     printf("  %-22s pkts=%u lost=%u stale=%u resync=%u late=%u wd=%u reassert=%u restarts=%u maxStuck=%u\n",
            sc.name, r.st.packets, r.st.lost, r.st.stale, r.st.resyncs, r.st.late, r.st.watchdogs, r.st.reasserts,
            r.st.restarts, r.maxStuck);

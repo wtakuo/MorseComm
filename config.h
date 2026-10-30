@@ -43,8 +43,35 @@ constexpr int OFFSET_BUCKETS = 4;                // 直近 何バケット の�
 constexpr uint32_t LINK_TIMEOUT_MS = 3000;       // これ以上無受信なら次のパケットで再初期化
 constexpr int32_t SENDER_RESTART_BACKSTEP_MS = 2000;  // txMs がこれ以上戻ったら相手の再起動とみなす
 
+// ---- 無線の種類 (設定で切り替え。切り替えると再起動する) ----
+constexpr uint8_t RADIO_ESPNOW = 0;
+constexpr uint8_t RADIO_LORA = 1;   // Nesso N1 のみ (SX1262)
+
 // ---- ESP-NOW ----
 constexpr uint8_t ESPNOW_CHANNEL = 1;   // Wi-Fi のチャンネル (全局共通・固定)
+
+// ---- LoRa (920MHz 帯 特定小電力無線局 20mW 以下。ARIB STD-T108 / 無線設備規則) ----
+// キャリアセンス 5ms 以上の区分を使う: 1 回の送信 4 秒以下、送信後の休止 50ms 以上、1 時間あたりの総和制限なし。
+// 帯域 500kHz は単位チャネル (200kHz) 3 つの結束。通信チャンネル n の中心周波数 = BASE + STEP * (n - 1)
+// (n=1: 920.6/920.8/921.0 MHz の結束 → 中心 920.8MHz, n=10: 926.2MHz)
+constexpr float LORA_FREQ_BASE_MHZ = 920.8f;
+constexpr float LORA_FREQ_STEP_MHZ = 0.6f;
+constexpr float LORA_BW_KHZ = 500.0f;
+constexpr uint8_t LORA_SF = 5;
+constexpr uint8_t LORA_CR = 5;             // 4/5
+constexpr uint8_t LORA_SYNC_WORD = 0x12;   // プライベート
+constexpr int8_t LORA_POWER_DBM = 13;      // 20mW (空中線電力の上限)
+constexpr uint16_t LORA_PREAMBLE = 8;
+constexpr float LORA_TCXO_V = 3.0f;
+constexpr uint32_t LORA_CS_US = 5200;            // キャリアセンス時間 (規則: 5ms 以上)
+constexpr uint32_t LORA_PAUSE_MS = 52;           // 送信後の休止 (規則: 50ms 以上)
+constexpr int LORA_CS_LEVEL_DBM = -80;           // キャリアセンスレベル (給電線入力点)
+// 受信経路の LNA (SGM13005L4, 約 21dB) の利得。SX1262 の RSSI はこの分だけ高く出るので差し引く。
+// キャリアセンスが甘くならないよう、資料値より小さめにしている
+constexpr int LORA_LNA_GAIN_DB = 20;
+constexpr uint32_t LORA_TX_TIMEOUT_MS = 100;     // 送信完了割り込みが来ない場合の復帰
+constexpr uint32_t LORA_TX_INTERVAL_IDLE_MS = 1000;  // アイドル時のハートビート (チャンネルを空けるため長め)
+constexpr uint32_t LORA_JITTER_DELAY_MS = 250;   // 送信間隔が約 60ms と長いので、ジッタ遅延も長くする
 
 // ---- 通信チャンネル (無線機の「チャンネル」に相当。パケットに載せ、同じ値の局どうしだけが通信する) ----
 constexpr uint8_t CH_MIN = 1;

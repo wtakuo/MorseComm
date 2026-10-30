@@ -66,6 +66,27 @@ inline bool decodePacket(const uint8_t* buf, size_t len, Packet& pk) {
   return true;
 }
 
+// エンコード済みパケットの送信時刻を newTxMs に付け替える (履歴の age も同じだけ増やす)。
+// 組み立ててから実際に送信するまで待たされる経路 (LoRa) で、送信直前に呼ぶ。
+// 組み立て以降に遷移が無ければ (新しい遷移があれば組み立て直されている) 内容は変わらない
+inline bool restampPacket(uint8_t* buf, size_t len, uint32_t newTxMs) {
+  if (len < PKT_HEADER_SIZE || buf[0] != PKT_MAGIC) return false;
+  uint8_t n = buf[12];
+  if (n > cfg::HIST_MAX || len < PKT_HEADER_SIZE + 2 * (size_t)n) return false;
+  uint32_t d = newTxMs - get32(buf + 8);
+  if (d >= 0x80000000u) return false;  // 時刻が戻ることはない
+  put32(buf + 8, newTxMs);
+  for (int i = 0; i < n; i++) {
+    uint32_t a = get16(buf + PKT_HEADER_SIZE + 2 * i) + d;
+    put16(buf + PKT_HEADER_SIZE + 2 * i, a > 0xFFFF ? 0xFFFF : (uint16_t)a);
+  }
+  return true;
+}
+
+// エンコード済みパケットの通番を付け替える。組み立てた分の一部しか送らない経路 (LoRa) で、
+// 実際に送った順に通番を振り直す (受信側のロス率推定が通番の欠番を数えるため)
+inline void setPacketSeq(uint8_t* buf, uint16_t seq) { put16(buf + 4, seq); }
+
 // 送信側: キー状態の遷移履歴を保持し、パケットを組み立てる
 class TxHistory {
  public:
@@ -111,6 +132,9 @@ class TxHistory {
 // 送信スケジューラ (§4.2): いつパケットを送るかを決める
 class TxScheduler {
  public:
+  // アイドル時のハートビート間隔 (無線の種類ごとに変える)
+  void setIdleInterval(uint32_t ms) { idleMs_ = ms; }
+
   // 遷移が発生したら呼ぶ (次の poll で即時送信)
   void onTransition(uint8_t newState, uint32_t nowMs) {
     state_ = newState;
@@ -121,7 +145,7 @@ class TxScheduler {
   // 今送るべきなら true (送信したものとして内部時刻を更新する)
   bool poll(uint32_t nowMs) {
     bool active = state_ == 1 || (nowMs - lastChangeMs_) < cfg::TX_ACTIVE_HOLD_MS;
-    uint32_t interval = active ? cfg::TX_INTERVAL_ACTIVE_MS : cfg::TX_INTERVAL_IDLE_MS;
+    uint32_t interval = active ? cfg::TX_INTERVAL_ACTIVE_MS : idleMs_;
     if (pending_ || !started_ || (nowMs - lastSendMs_) >= interval) {
       pending_ = false;
       started_ = true;
@@ -135,6 +159,7 @@ class TxScheduler {
   uint8_t state_ = 0;
   uint32_t lastChangeMs_ = 0;
   uint32_t lastSendMs_ = 0;
+  uint32_t idleMs_ = cfg::TX_INTERVAL_IDLE_MS;
   bool pending_ = false;
   bool started_ = false;
 };

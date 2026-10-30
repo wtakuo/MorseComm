@@ -18,6 +18,7 @@ constexpr int Y_RX_LABEL = 18, Y_RX_TEXT = 35;
 constexpr int Y_TX_LABEL = 85, Y_TX_TEXT = 102;
 // 設定画面のレイアウト
 constexpr int ROW_Y0 = 17, ROW_H = 17;
+constexpr int VISIBLE_ROWS = 7;           // 画面に収まる項目数 (それ以上はスクロール)
 constexpr int LIST_W = 164;               // 項目リストの幅 (右側は +/- ボタン)
 constexpr int BTN_X = 170, BTN_W = W - BTN_X;
 constexpr int BTN_PLUS_Y = 17, BTN_MINUS_Y = 77, BTN_H = 57;
@@ -32,8 +33,10 @@ constexpr uint16_t COL_SEL = 0x04DF;     // 選択中の項目の背景
 constexpr uint16_t COL_BTN = 0x31A6;     // タッチボタン
 constexpr uint16_t COL_WARN = 0xF9E7;    // 赤
 constexpr uint16_t COL_EDIT = 0xFB20;    // 変更中の項目の背景 (橙)
+constexpr uint16_t COL_LORA = 0x8010;    // LoRa 使用中のチャンネル表示の背景 (紫)
 
 LGFX_Sprite canvas;
+int listTop = 0;  // 設定画面: 先頭に表示している項目
 
 // 末尾を保持するテキストバッファ (あふれたら 1 行ぶんまとめて捨てて折り返し位置を保つ)
 struct TextBuf {
@@ -129,6 +132,7 @@ const char* itemLabel(Item it) {
     case Item::RxHz: return "RX FREQ";
     case Item::Volume: return "VOLUME";
     case Item::Swap: return "PADDLE";
+    case Item::Radio: return "RADIO";
     default: return "";
   }
 }
@@ -142,6 +146,10 @@ void itemValue(const Settings& s, Item it, char* buf, size_t n) {
     case Item::RxHz: snprintf(buf, n, "%u Hz", s.rxHz); break;
     case Item::Volume: snprintf(buf, n, "%u / %d", s.volume, 5); break;
     case Item::Swap: snprintf(buf, n, "%s", s.swap ? "SWAPPED" : "NORMAL"); break;
+    case Item::Radio:
+      // 動作中と違う場合は、設定画面を抜けると再起動して切り替わる
+      snprintf(buf, n, "%s%s", s.radio == cfg::RADIO_LORA ? "LoRa" : "ESP-NOW", s.radio != net::radio() ? " *" : "");
+      break;
     default: buf[0] = 0; break;
   }
 }
@@ -156,7 +164,11 @@ void drawTouchButton(int y, const char* sym) {
   canvas.setTextDatum(textdatum_t::top_left);
 }
 
-void present() { canvas.pushSprite(&hw::display(), 0, 0); }
+void present() {
+  hw::lockBus();  // Nesso N1 では LoRa と SPI を共有している
+  canvas.pushSprite(&hw::display(), 0, 0);
+  hw::unlockBus();
+}
 
 }  // namespace
 
@@ -228,14 +240,16 @@ TouchEvent pollTouch(bool settingsScreen) {
   }
   ev.kind = kind;
   if (kind == TouchEvent::Row) {
-    int row = (ev.y - ROW_Y0) / ROW_H;
-    if (ev.y < ROW_Y0 || row >= (int)Item::Count) ev.kind = TouchEvent::None;
+    int row = listTop + (ev.y - ROW_Y0) / ROW_H;
+    if (ev.y < ROW_Y0 || row >= itemCount()) ev.kind = TouchEvent::None;
     ev.row = row;
   }
   return ev;
 }
 
 bool touchAvailable() { return hw::hasTouch(); }
+
+int itemCount() { return net::loraAvailable() ? (int)Item::Count : (int)Item::Radio; }
 
 Battery readBattery() { return hw::battery(); }
 
@@ -245,10 +259,12 @@ void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const B
   canvas.fillScreen(COL_BG);
   useLabelFont();
 
-  // 1 行目: チャンネル、リンク状態、電池
-  snprintf(tmp, sizeof(tmp), "CH%u", s.channel);
-  canvas.fillRoundRect(0, Y_STATUS, 8 * strlen(tmp) + 6, 16, 3, COL_SEL);
-  canvas.setTextColor(TFT_WHITE, COL_SEL);
+  // 1 行目: チャンネル (LoRa 使用中は "LoRa1" のように紫で)、リンク状態、電池
+  bool lora = net::radio() == cfg::RADIO_LORA;
+  snprintf(tmp, sizeof(tmp), "%s%u", lora ? "LoRa" : "CH", s.channel);
+  uint16_t chBg = lora ? COL_LORA : COL_SEL;
+  canvas.fillRoundRect(0, Y_STATUS, 8 * strlen(tmp) + 6, 16, 3, chBg);
+  canvas.setTextColor(TFT_WHITE, chBg);
   canvas.drawString(tmp, 3, Y_STATUS);
   int x = 8 * strlen(tmp) + 12;
   uint32_t total = snap.rx.packets + snap.rx.lost;
@@ -308,11 +324,11 @@ void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const B
   if (showChannel) {
     constexpr int BW = 150, BH = 70;
     int bx = (W - BW) / 2, by = (H - BH) / 2 + 8;
-    canvas.fillRoundRect(bx, by, BW, BH, 10, COL_SEL);
+    canvas.fillRoundRect(bx, by, BW, BH, 10, chBg);
     canvas.drawRoundRect(bx, by, BW, BH, 10, TFT_WHITE);
     canvas.setFont(&fonts::Font4);
     canvas.setTextSize(2);
-    canvas.setTextColor(TFT_WHITE, COL_SEL);
+    canvas.setTextColor(TFT_WHITE, chBg);
     canvas.setTextDatum(textdatum_t::middle_center);
     snprintf(tmp, sizeof(tmp), "CH %u", s.channel);
     canvas.drawString(tmp, W / 2, by + BH / 2 + 2);
@@ -340,9 +356,14 @@ void drawSettings(const Settings& s, Item selected, bool editing, const Battery&
   }
   drawBattery(bat);
 
-  for (int i = 0; i < (int)Item::Count; i++) {
+  // 選択中の項目が見えるようにスクロールする
+  int count = itemCount();
+  if ((int)selected < listTop) listTop = (int)selected;
+  if ((int)selected >= listTop + VISIBLE_ROWS) listTop = (int)selected - VISIBLE_ROWS + 1;
+  if (listTop > count - VISIBLE_ROWS) listTop = count > VISIBLE_ROWS ? count - VISIBLE_ROWS : 0;
+  for (int i = listTop; i < count && i < listTop + VISIBLE_ROWS; i++) {
     Item it = (Item)i;
-    int y = ROW_Y0 + i * ROW_H;
+    int y = ROW_Y0 + (i - listTop) * ROW_H;
     bool sel = it == selected;
     uint16_t bg = !sel ? COL_BG : editing ? COL_EDIT : COL_SEL;
     if (sel) canvas.fillRect(0, y, listW, ROW_H, bg);

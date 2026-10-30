@@ -34,7 +34,7 @@ uint32_t setVer = 0xFFFFFFFF, ctlVer = 0xFFFFFFFF;
 bool logOn = false;
 
 uint16_t pktSeq = 0;
-uint32_t txPackets = 0, injectedDrops = 0;
+uint32_t txPackets = 0;
 uint8_t localState = 0;
 uint32_t localLastMs = 0;
 uint32_t lastSnapshotMs = 0;
@@ -112,12 +112,16 @@ void syncShared(uint32_t now) {
 
   if (sChanged) {
     applySettings(now, set.mode != oldMode);
-    if (set.channel != oldSet.channel) peers.clear();  // 別チャンネルの局の再生は打ち切る
+    if (set.channel != oldSet.channel) {
+      peers.clear();  // 別チャンネルの局の再生は打ち切る
+      net::setChannel(set.channel);
+    }
     // 音に関わる設定を変えたら、その音を短く鳴らして確認できるようにする
     if (set.sideHz != oldSet.sideHz || (set.sideOn && !oldSet.sideOn)) preview(set.sideHz, now);
     else if (set.rxHz != oldSet.rxHz || set.volume != oldSet.volume) preview(set.rxHz, now);
   }
   if (!cChanged) return;
+  net::setLossInjection(ctl.lossPct, ctl.dropUp);
   if (ctl.testOn && (!oldCtl.testOn || strcmp(ctl.testText, oldCtl.testText) != 0)) {
     textKeyer.start(ctl.testText, set.wpm, now);
   } else if (!ctl.testOn && oldCtl.testOn) {
@@ -151,11 +155,6 @@ void transmit(uint32_t now) {
   cw::Packet p;
   hist.build(p, now, cfg::HIST_N, set.channel, pktSeq++);
   txPackets++;
-  bool drop = (ctl.lossPct && (esp_random() % 100) < ctl.lossPct) || (ctl.dropUp && p.state == 0);
-  if (drop) {
-    injectedDrops++;
-    return;
-  }
   uint8_t buf[cw::PKT_MAX_SIZE];
   size_t len = cw::encodePacket(p, buf, sizeof(buf));
   if (len) net::send(buf, len);
@@ -224,7 +223,7 @@ void publishSnapshot(uint32_t now) {
   s.remoteDown = peers.anyDown();
   s.localWpm = decLocal.wpm();
   s.txPackets = txPackets;
-  s.injectedDrops = injectedDrops;
+  s.injectedDrops = s.net.injected;
   s.lastActivityMs = lastActivityMs;
   s.nowMs = now;
   lockShared();
@@ -258,7 +257,12 @@ bool begin() {
   curHz = cfg::SIDE_HZ_DEFAULT;
   hist = cw::TxHistory((uint16_t)esp_random());
   pktSeq = (uint16_t)esp_random();
-  bool ok = net::begin(cfg::ESPNOW_CHANNEL);
+  lockShared();
+  Settings s0 = g_settings;
+  unlockShared();
+  bool ok = net::begin(s0.radio, s0.channel);
+  // LoRa は送信できる間隔が長い (約 60ms) ので、アイドル時のハートビートも間引く
+  if (net::radio() == cfg::RADIO_LORA) sched.setIdleInterval(cfg::LORA_TX_INTERVAL_IDLE_MS);
   xTaskCreate(task, "cw", TASK_STACK, nullptr, TASK_PRIORITY, nullptr);
   return ok;
 }
