@@ -86,7 +86,21 @@ void drawText(const TextBuf& t, int rows, int y, uint16_t color) {
     if (n > COLS) n = COLS;
     memcpy(line, t.buf + start + r * COLS, n);
     line[n] = 0;
+    bool unknown = false;
+    for (int i = 0; i < n; i++) {
+      if (line[i] == cw::CHAR_UNKNOWN) {
+        line[i] = ' ';
+        unknown = true;
+      }
+    }
+    canvas.setTextColor(color, COL_BG);
     canvas.drawString(line, 0, y + r * 16);
+    // 解読できなかった符号は赤い '?'
+    if (unknown) {
+      canvas.setTextColor(COL_WARN, COL_BG);
+      for (int i = 0; i < n; i++)
+        if (t.buf[start + r * COLS + i] == cw::CHAR_UNKNOWN) canvas.drawString("?", i * 12, y + r * 16);
+    }
   }
 }
 

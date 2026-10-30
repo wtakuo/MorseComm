@@ -161,19 +161,18 @@ class IambicKeyer {
 };
 
 // テキストを指定 WPM で自動キーイングする (テストモード用)。末尾に語間をおいて繰り返す
+// "[SK]" のように角括弧で囲んだ文字は、文字間を空けずに続けて送る (略符号)
 class TextKeyer {
  public:
   static constexpr int MAX_TEXT = 64;
 
   void start(const char* text, int wpm, uint32_t nowMs) {
-    strncpy(text_, text, MAX_TEXT - 1);
-    text_[MAX_TEXT - 1] = 0;
+    build(text);
     ditMs_ = ditMsForWpm(wpm);
-    chr_ = 0;
-    el_ = 0;
+    pos_ = 0;
     down_ = false;
     tNext_ = nowMs;
-    running_ = text_[0] != 0;
+    running_ = len_ > 0;
     events_.clear();
   }
   void stop() { running_ = false; }
@@ -194,48 +193,66 @@ class TextKeyer {
   bool pop(KeyEvent& ev) { return events_.pop(ev); }
 
  private:
-  // 現在位置の符号 (空白・未対応文字は nullptr)
-  const char* codeAt(int i) const { return text_[i] ? morseEncode(text_[i]) : nullptr; }
+  // 列の記号: '.' '-' = 要素 (要素間は 1 dit)、間隔記号 GAP_* は直後の要素の前に置く
+  static constexpr char GAP_JOIN = 'j';  // 略符号内の文字間 (1 dit)
+  static constexpr char GAP_CHAR = 'c';  // 文字間 (3 dit)
+  static constexpr char GAP_WORD = 'w';  // 語間 (7 dit)
+  static constexpr int MAX_SEQ = MAX_TEXT * 8;
 
-  void step() {
-    if (down_) {
-      // マーク終了 → スペースの長さを決める
-      down_ = false;
-      events_.push(tNext_, 0);
-      const char* code = codeAt(chr_);
-      el_++;
-      uint32_t gap = 1;
-      if (code[el_] == 0) {
-        el_ = 0;
-        chr_++;
-        gap = 3;
-        // 空白や末尾をまとめて語間にする
-        while (text_[chr_] && !codeAt(chr_)) {
-          chr_++;
-          gap = 7;
-        }
-        if (!text_[chr_]) {
-          chr_ = 0;
-          gap = 7;
-        }
+  void build(const char* text) {
+    len_ = 0;
+    bool inProsign = false, prevInProsign = false, word = false;
+    for (int i = 0; text[i] && i < MAX_TEXT; i++) {
+      char c = text[i];
+      if (c == '[') {
+        inProsign = true;
+        continue;
       }
-      tNext_ += gap * ditMs_;
-    } else {
-      while (text_[chr_] && !codeAt(chr_)) chr_++;
-      if (!text_[chr_]) {  // 符号化できる文字がない
-        running_ = false;
-        return;
+      if (c == ']') {
+        inProsign = false;
+        continue;
       }
-      const char* code = codeAt(chr_);
-      down_ = true;
-      events_.push(tNext_, 1);
-      tNext_ += (code[el_] == '-' ? 3 : 1) * ditMs_;
+      const char* code = morseEncode(c);
+      if (!code) {  // 空白や未対応の文字は語間
+        word = true;
+        continue;
+      }
+      if (len_ > 0 && len_ < MAX_SEQ) {
+        seq_[len_++] = word ? GAP_WORD : (inProsign && prevInProsign) ? GAP_JOIN : GAP_CHAR;
+      }
+      for (; *code && len_ < MAX_SEQ; code++) seq_[len_++] = *code;
+      word = false;
+      prevInProsign = inProsign;
     }
   }
 
-  char text_[MAX_TEXT] = {};
+  static uint32_t gapDits(char g) { return g == GAP_WORD ? 7 : g == GAP_CHAR ? 3 : 1; }
+
+  void step() {
+    if (!down_) {
+      down_ = true;
+      events_.push(tNext_, 1);
+      tNext_ += (seq_[pos_] == '-' ? 3 : 1) * ditMs_;
+      return;
+    }
+    down_ = false;
+    events_.push(tNext_, 0);
+    pos_++;
+    uint32_t gap = 1;
+    if (pos_ < len_ && (seq_[pos_] == GAP_JOIN || seq_[pos_] == GAP_CHAR || seq_[pos_] == GAP_WORD)) {
+      gap = gapDits(seq_[pos_]);
+      pos_++;
+    }
+    if (pos_ >= len_) {
+      pos_ = 0;
+      gap = 7;
+    }
+    tNext_ += gap * ditMs_;
+  }
+
+  char seq_[MAX_SEQ];
+  int len_ = 0, pos_ = 0;
   uint32_t ditMs_ = 60;
-  int chr_ = 0, el_ = 0;
   bool down_ = false;
   bool running_ = false;
   uint32_t tNext_ = 0;

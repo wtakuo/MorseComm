@@ -337,7 +337,11 @@ void drainOutput() {
       case OutItem::CharTx:
       case OutItem::CharRx:
         ui::addChar(it.kind == OutItem::CharRx, it.c);
-        if (g_logOn) Serial.printf("%s '%c'\n", it.kind == OutItem::CharRx ? "RXCHR" : "TXCHR", it.c);
+        if (g_logOn) {
+          const char* tag = it.kind == OutItem::CharRx ? "RXCHR" : "TXCHR";
+          if (it.c == cw::CHAR_UNKNOWN) Serial.printf("%s <unknown>\n", tag);
+          else Serial.printf("%s '%c'\n", tag, it.c);
+        }
         break;
       case OutItem::LogLocal:
         // 直前の状態の長さ: DOWN になった → 直前の UP の長さ

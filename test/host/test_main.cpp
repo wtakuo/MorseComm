@@ -269,7 +269,14 @@ static void testDecoder() {
     tl.push_back({t + 60, 0});
     t += 120;
   }
-  CHECK(decodeTimeline(tl) == "? ", "unknown: '%s'", decodeTimeline(tl).c_str());
+  CHECK(decodeTimeline(tl) == std::string(1, CHAR_UNKNOWN) + " ", "unknown: '%s'", decodeTimeline(tl).c_str());
+  // 略符号: 文字間を空けずに送った SK は [SK]。正しく送った '?' は '?' のまま
+  {
+    std::string got = decodeTimeline(textOnce("CQ [SK] ? TU", 20, 1000));
+    CHECK(got == "CQ [SK] ? TU ", "prosign: '%s'", got.c_str());
+    got = decodeTimeline(textOnce("SK [SK]", 25, 1000), 4, 5);
+    CHECK(got == "SK [SK] ", "prosign jitter: '%s'", got.c_str());
+  }
   {
     MorseDecoder d;
     auto tl2 = textOnce("PARIS PARIS PARIS", 25, 0);

@@ -73,15 +73,19 @@ class MorseDecoder {
   }
 
   void flushChar() {
-    char c = '?';
+    const char* text = nullptr;
     if (nEl_ <= MAX_ELEMS) {
       char code[MAX_ELEMS + 1];
       for (int i = 0; i < nEl_; i++) code[i] = el_[i];
       code[nEl_] = 0;
-      c = morseDecode(code);
+      text = morseDecodeText(code);
     }
     nEl_ = 0;
-    emit(c);
+    if (!text) {
+      emit(CHAR_UNKNOWN);
+      return;
+    }
+    for (; *text; text++) emit(*text);
   }
 
   void emit(char c) {
