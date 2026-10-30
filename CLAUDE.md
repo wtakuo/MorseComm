@@ -42,8 +42,11 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
 ## 3. ディレクトリ構成 (提案)
 
 ```
-morse_espnow/
-  morse_espnow.ino      # setup()/loop()、各モジュールの組み立て
+(リポジトリ直下がスケッチフォルダ。ユーザー指示により .ino はルートに置く)
+  MorseComm.ino         # setup()/loop()、UI・シリアルコマンド・設定保存
+  engine.h/.cpp         # 1ms 周期のキーイングタスク (キー入力〜送信、受信再生、トーン、デコード)
+  shared.h              # タスク間の共有データ
+  morse_table.h         # 符号表
   config.h              # ピン、既定パラメータ、MACアドレス/グループID
   protocol.h            # パケット構造体、エンコード/デコード (Arduino非依存)
   keyer.h               # ストレートキー処理、イアンビックキーヤー (Arduino非依存の状態機械)
@@ -196,13 +199,26 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 
 ## 10. 実機・環境メモ (Claude Code が調査結果をここに追記する)
 
-- FQBN: (未確認)
-- ボードパッケージ / コアバージョン: (未確認)
-- 使用ライブラリ (画面など): (未確認)
-- 2台のシリアルポートと MAC アドレス: (未確認)
-- キー・パドルの接続ピン: (ユーザーに確認)
-- トーン出力の方法とピン: (未確認)
-- 実測したネットワーク遅延・ロス: (未計測)
+- FQBN: `esp32:esp32:arduino_nesso_n1` (`board list` では "ESP32 Family Device" と表示されるが、このFQBNを指定する)
+- ボードパッケージ / コアバージョン: `esp32:esp32` 3.3.12 (ESP-IDF 5.5 系)。
+  ESP-NOW の受信CBは `(const esp_now_recv_info_t*, const uint8_t*, int)`、
+  送信CBは `(const esp_now_send_info_t* /*=wifi_tx_info_t*/, esp_now_send_status_t)`。
+  FreeRTOS は 1000Hz ティック・シングルコア
+- 使用ライブラリ: `Arduino_Nesso_N1` 1.0.0 (依存: M5GFX 0.2.35, Arduino_BMI270_BMM150)。
+  画面は ST7789 135x240 (`NessoDisplay`, LovyanGFX 互換 API)。`setRotation(1)` で 240x135 横長
+- ボタン: KEY1 / KEY2 は I2C の IO エキスパンダ (PI4IOE5V6408, 0x43) 経由。`digitalRead(KEY1)` で読める (押下=LOW)。
+  `NessoDisplay::begin()` が INPUT_PULLUP に設定する。I2C なので loop() 側からのみ読む
+- Grove: GPIO5 = `GROVE_IO_0`, GPIO4 = `GROVE_IO_1`。`GROVE_POWER_EN` (エキスパンダ) を触らなくても
+  INPUT_PULLUP + キー接点 → GND で読めることを実機で確認
+- 2台のシリアルポートと MAC アドレス:
+  - `/dev/cu.usbmodem101`  : [Nesso-A] — アイアンビックパドル (GPIO4, GPIO5)
+  - `/dev/cu.usbmodem1101` : [Nesso-B] — ストレートキー (GPIO4)
+- キー・パドルの接続ピン: ストレート = GPIO4。パドル = GPIO4 / GPIO5 (DIT/DAH の対応は要確認。`swap 1` で入れ替え)
+- トーン出力の方法とピン: 内蔵ブザー `BEEP_PIN` = GPIO11 を LEDC PWM で駆動 (音量はデューティ比で5段階)
+- シリアル: USB CDC (115200)。`arduino-cli monitor` はパイプ経由だと何も出ないため、
+  `stty -f PORT 115200 raw` + `cat` で読む
+- 実測したネットワーク遅延・ロス: 2台を机上に並べた状態で RSSI -20〜-50 dBm、ロス 0.2% 程度。
+  PARIS@20WPM の DOWN/UP 長は受信側で 60/180/420 ms ぴったりに再現された (ジッタ遅延 150ms, 遅延超過 0)
 
 ## 11. 進め方 (推奨フェーズ)
 

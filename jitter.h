@@ -222,8 +222,8 @@ class Receiver {
 
   void enqueue(uint32_t playMs, uint8_t st, EventKind kind, uint32_t nowMs) {
     if (st == lastQueuedState_) return;  // 交互にならない遷移 (再同期時) は捨てる
-    if (timeBefore(playMs, lastQueuedMs_)) playMs = lastQueuedMs_;  // 時間軸を単調に保つ
     if (timeBefore(playMs, nowMs)) stats_.late++;
+    if (timeBefore(playMs, lastQueuedMs_)) playMs = lastQueuedMs_;  // 時間軸を単調に保つ
     int next = (qTail_ + 1) % QUEUE_SIZE;
     if (next == qHead_) {  // あふれた: 最古を即時適用して空ける
       apply(queue_[qHead_]);

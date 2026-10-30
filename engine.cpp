@@ -1,0 +1,208 @@
+#include "engine.h"
+#include <Arduino.h>
+#include <esp_random.h>
+#include <string.h>
+#include "config.h"
+#include "protocol.h"
+#include "morse_decoder.h"
+#include "tone_out.h"
+
+namespace engine {
+namespace {
+
+constexpr int OUT_QUEUE_LEN = 128;
+constexpr UBaseType_t TASK_PRIORITY = 5;  // loop() (1) より高く、Wi-Fi タスクより低い
+constexpr uint32_t TASK_STACK = 6144;
+constexpr uint32_t SNAPSHOT_INTERVAL_MS = 50;
+
+QueueHandle_t outQ = nullptr;
+ToneOut toneOut;
+
+cw::Debouncer dbStraight, dbDit, dbDah;
+cw::IambicKeyer iambic;
+cw::TextKeyer textKeyer;
+cw::TxHistory hist;
+cw::TxScheduler sched;
+cw::Receiver rx;
+cw::MorseDecoder decLocal, decRemote;
+
+Settings set;
+Control ctl;
+uint32_t setVer = 0xFFFFFFFF, ctlVer = 0xFFFFFFFF;
+bool logOn = false;
+
+uint16_t pktSeq = 0;
+uint32_t txPackets = 0, injectedDrops = 0;
+int8_t lastRssi = 0;
+uint8_t localState = 0;
+uint32_t localLastMs = 0, remoteLastMs = 0;
+uint32_t lastSnapshotMs = 0;
+
+void out(const OutItem& it) { xQueueSend(outQ, &it, 0); }
+
+// 自局のキー状態を変える (どのモードでもここを通る)
+void setLocal(uint8_t st, uint32_t t) {
+  if (!hist.push(st, t)) return;
+  sched.onTransition(st, t);
+  decLocal.onTransition(st, t);
+  if (logOn) out(OutItem{OutItem::LogLocal, 0, st, 0, t, t - localLastMs});
+  localLastMs = t;
+  localState = st;
+}
+
+void applySettings(uint32_t now, bool modeChanged) {
+  iambic.setWpm(set.wpm);
+  iambic.setModeB(set.mode == (uint8_t)cw::KeyMode::IambicB);
+  toneOut.setFrequency(set.toneHz);
+  toneOut.setVolume(set.volume);
+  rx.setDelay(set.jitterMs);
+  if (modeChanged) {
+    iambic.reset();
+    setLocal(0, now);
+  }
+  if (ctl.testOn) textKeyer.start(ctl.testText, set.wpm, now);
+}
+
+void syncShared(uint32_t now) {
+  lockShared();
+  bool sChanged = g_settingsVer != setVer;
+  bool cChanged = g_controlVer != ctlVer;
+  uint8_t oldMode = set.mode;
+  Control oldCtl = ctl;
+  if (sChanged) {
+    set = g_settings;
+    setVer = g_settingsVer;
+  }
+  if (cChanged) {
+    ctl = g_control;
+    ctlVer = g_controlVer;
+  }
+  logOn = g_logOn;
+  unlockShared();
+
+  if (sChanged) applySettings(now, set.mode != oldMode);
+  if (!cChanged) return;
+  if (ctl.testOn && (!oldCtl.testOn || strcmp(ctl.testText, oldCtl.testText) != 0)) {
+    textKeyer.start(ctl.testText, set.wpm, now);
+  } else if (!ctl.testOn && oldCtl.testOn) {
+    textKeyer.stop();
+    setLocal(0, now);
+  }
+}
+
+void readKeys(uint32_t now) {
+  if (ctl.testOn) {
+    textKeyer.update(now);
+    cw::KeyEvent ev;
+    while (textKeyer.pop(ev)) setLocal(ev.state, ev.t);
+    return;
+  }
+  if (set.mode == (uint8_t)cw::KeyMode::Straight) {
+    bool k = dbStraight.update(digitalRead(cfg::PIN_STRAIGHT) == LOW, now);
+    if (dbStraight.takeChanged()) setLocal(k, dbStraight.lastChangeMs());
+    return;
+  }
+  bool a = dbDit.update(digitalRead(cfg::PIN_PADDLE_DIT) == LOW, now);
+  bool b = dbDah.update(digitalRead(cfg::PIN_PADDLE_DAH) == LOW, now);
+  if (set.swap) iambic.update(now, b, a);
+  else iambic.update(now, a, b);
+  cw::KeyEvent ev;
+  while (iambic.pop(ev)) setLocal(ev.state, ev.t);
+}
+
+void transmit(uint32_t now) {
+  if (!sched.poll(now)) return;
+  cw::Packet p;
+  hist.build(p, now, cfg::HIST_N, cfg::GROUP_ID, pktSeq++);
+  txPackets++;
+  bool drop = (ctl.lossPct && (esp_random() % 100) < ctl.lossPct) || (ctl.dropUp && p.state == 0);
+  if (drop) {
+    injectedDrops++;
+    return;
+  }
+  uint8_t buf[cw::PKT_MAX_SIZE];
+  size_t len = cw::encodePacket(p, buf, sizeof(buf));
+  if (len) net::send(buf, len);
+}
+
+void receive(uint32_t now) {
+  net::RxItem item;
+  while (net::receive(item)) {
+    cw::Packet p;
+    if (!cw::decodePacket(item.data, item.len, p) || p.group != cfg::GROUP_ID) continue;
+    lastRssi = item.rssi;
+    rx.onPacket(p, item.rxMs);
+  }
+  rx.update(now);
+  cw::PlayedEvent ev;
+  while (rx.pop(ev)) {
+    decRemote.onTransition(ev.state, ev.playMs);
+    if (logOn) out(OutItem{OutItem::LogRemote, 0, ev.state, (uint8_t)ev.kind, ev.playMs, ev.playMs - remoteLastMs});
+    remoteLastMs = ev.playMs;
+  }
+}
+
+void decode(uint32_t now) {
+  char c;
+  decLocal.update(now);
+  while (decLocal.pop(c)) out(OutItem{OutItem::CharTx, c, 0, 0, now, 0});
+  decRemote.update(now);
+  while (decRemote.pop(c)) out(OutItem{OutItem::CharRx, c, 0, 0, now, 0});
+}
+
+void publishSnapshot(uint32_t now) {
+  if (now - lastSnapshotMs < SNAPSHOT_INTERVAL_MS) return;
+  lastSnapshotMs = now;
+  Snapshot s;
+  s.rx = rx.stats();
+  s.net = net::stats();
+  s.offset = rx.offset();
+  s.rssi = lastRssi;
+  s.linkUp = rx.linkUp(now);
+  s.localDown = localState;
+  s.remoteDown = rx.state();
+  s.localWpm = decLocal.wpm();
+  s.remoteWpm = decRemote.wpm();
+  s.txPackets = txPackets;
+  s.injectedDrops = injectedDrops;
+  s.nowMs = now;
+  lockShared();
+  g_snapshot = s;
+  unlockShared();
+}
+
+void task(void*) {
+  TickType_t last = xTaskGetTickCount();
+  for (;;) {
+    uint32_t now = millis();
+    syncShared(now);
+    readKeys(now);
+    transmit(now);
+    receive(now);
+    // サイドトーン (ローカル) と受信再生の OR
+    if (localState || rx.state()) toneOut.on();
+    else toneOut.off();
+    decode(now);
+    publishSnapshot(now);
+    vTaskDelayUntil(&last, 1);
+  }
+}
+
+}  // namespace
+
+bool begin() {
+  outQ = xQueueCreate(OUT_QUEUE_LEN, sizeof(OutItem));
+  pinMode(cfg::PIN_STRAIGHT, INPUT_PULLUP);
+  pinMode(cfg::PIN_PADDLE_DIT, INPUT_PULLUP);
+  pinMode(cfg::PIN_PADDLE_DAH, INPUT_PULLUP);
+  toneOut.begin(cfg::PIN_BUZZER, cfg::TONE_HZ_DEFAULT);
+  hist = cw::TxHistory((uint16_t)esp_random());
+  pktSeq = (uint16_t)esp_random();
+  bool ok = net::begin(cfg::ESPNOW_CHANNEL);
+  xTaskCreate(task, "cw", TASK_STACK, nullptr, TASK_PRIORITY, nullptr);
+  return ok;
+}
+
+bool popOut(OutItem& item) { return outQ && xQueueReceive(outQ, &item, 0) == pdTRUE; }
+
+}  // namespace engine
