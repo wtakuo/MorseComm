@@ -4,7 +4,7 @@
 
 ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不要) を使って
 モールス符号のキーイング (A1A 相当: キーを押している間だけ「出る」) を双方向に伝送する。
-(当初の計画。その後 M5StickS3 対応・LoRa・電波 OFF モードを追加。現状は §13)
+(当初の計画。その後 M5StickS3 / M5StickC Plus2 対応・LoRa・電波 OFF モード・端末モードを追加。現状は §13)
 
 - 受信側は相手のキー状態に合わせてトーンを鳴らす
 - 送信側も自分用のモニタ(サイドトーン)を鳴らす
@@ -52,19 +52,19 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   engine.h/.cpp         # 1ms 周期のキーイングタスク (キー入力〜送信、受信再生、トーン、デコード)
   shared.h              # タスク間の共有データ
   morse_table.h         # 符号表
-  board.h               # ボード判別 (ARDUINO_ARDUINO_NESSO_N1 / ARDUINO_M5STACK_STICKS3) とキーのピン
+  board.h               # ボード判別 (ARDUINO_ARDUINO_NESSO_N1 / ARDUINO_M5STACK_STICKS3 / ARDUINO_M5STACK_STICKC_PLUS2) とキーのピン
   config.h              # 既定パラメータ (ボード共通、Arduino非依存)
   protocol.h            # パケット構造体、エンコード/デコード (Arduino非依存)
   keyer.h               # ストレートキー処理、イアンビックキーヤー (Arduino非依存の状態機械)
   jitter.h              # 受信側ジッタバッファ・再生スケジューラ (Arduino非依存)
   morse_decoder.h       # タイミングからの文字デコード (Arduino非依存)
-  tone_out.h + tone_out_nesso.cpp / tone_out_sticks3.cpp   # トーン出力 (ボードごと)
+  tone_out.h + tone_out_buzzer.cpp (Nesso, Plus2: LEDC) / tone_out_sticks3.cpp   # トーン出力
   net.h / net.cpp / net_internal.h   # 無線の共通部 (受信キュー・統計・ロス注入・無線の種類の振り分け)
   net_espnow.cpp        # ESP-NOW 送受信 (ボード共通)
   net_lora.cpp          # LoRa 送受信 (Nesso N1 のみ。専用タスク、キャリアセンス・休止、送信時刻の付け替え)
   ui.h/.cpp             # 画面 (メイン/設定) の描画とボタン・タッチ入力の解釈 (ボード共通)
-  hw.h + hw_nesso.cpp / hw_sticks3.cpp                     # 画面デバイス・ボタン・タッチ・電池 (ボードごと)
-  power.h + power_nesso.cpp / power_sticks3.cpp            # USB 給電検出・ディープスリープ (ボードごと)
+  hw.h + hw_nesso.cpp / hw_m5stick.cpp (StickS3, Plus2: M5Unified)   # 画面デバイス・ボタン・タッチ・電池
+  power.h + power_nesso.cpp / power_sticks3.cpp / power_stickcplus2.cpp  # USB 給電検出・ディープスリープ (ボードごと)
   (ボードごとの .cpp は全体を `#if defined(BOARD_xxx)` で囲む。Arduino はフォルダ内の全 .cpp をビルドするため)
   peers.h               # 複数局の受信: 送信元 MAC ごとの Receiver + デコーダ、全局 OR (Arduino非依存)
   tools/ser.sh          # シリアルへのコマンド送信と出力取得
@@ -275,6 +275,21 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - 電源: PMIC は M5PM1。USB 給電は `M5.Power.getVBUSVoltage()` > 4000mV (USB 時 約 5200mV)。
     電池 % は `getBatteryLevel()`。スリープ復帰は BtnA/BtnB (RTC GPIO) の EXT1 ANY_LOW。電池でのスリープ/復帰をユーザー確認済み
   - ESP32-S3 でもタイミングは完全に再現 (Nesso ⇔ StickS3 双方向、PARIS / CQ で誤差 0ms)
+- M5StickC Plus2 (2026-10-31 調査・実機確認):
+  - FQBN: `m5stack:esp32:m5stack_stickc_plus2` (ビルドディレクトリは build/stickcplus2)。ESP32-PICO-V3-02 (無印 ESP32)
+  - PMIC 無し。電池運用時は HOLD = G4 を HIGH にしないと電源が切れる (M5.begin が HIGH にする)。電池電圧は G38 の ADC
+    (M5.Power.getBatteryLevel)。**USB 給電も充電状態も検出できない** → usbPowered() は常に false
+    (USB 接続中も 3 分でスリープする。ユーザー了承済み)
+  - スリープ: G4 を gpio_hold で HIGH のまま、バックライト G27 を LOW で保持してディープスリープ。BtnA (G37) を EXT0、
+    BtnB (G39) を EXT1 ALL_LOW で起こす (無印 ESP32 は EXT1 の ANY_LOW が無い)。起動時に hw::begin で保持を解除
+    (G4 は先に HIGH を出力してから解除)。電源ボタン C は G35
+  - ボタン: BtnA = G37, BtnB = G39 (外部プルアップ, 押下 LOW)。ブザー: G2 (LEDC, M5.Speaker は使わない)。
+    画面 ST7789V2 135x240, setRotation(1)
+  - キー: Grove の G33 (白, ボード定義の SCL) = ストレート/DIT, G32 (黄, SDA) = DAH (ユーザー確認済み。StickS3 と同じ SCL/SDA 位置)
+  - USB シリアルは CH9102 (USB-UART, /dev/cu.usbserial-*)。HWCDC と違い setTxTimeoutMs が無く、送信バッファは begin の前に
+    設定する (ARDUINO_USB_CDC_ON_BOOT で分岐)。**macOS では USB-UART のポートを閉じると設定が 9600bps に戻る**ので、
+    tools/ser.sh は開いた fd に対して stty する。ポートを開いてもリセットはされなかった
+  - 実機: Plus2 ⇔ StickS3 の ESP-NOW 双方向で PARIS 20WPM / CQ TEST 30WPM の DOWN/UP 長を再現 (±1ms)、デコード誤りなし
 - LoRa (Nesso N1, 2026-10-30 調査・実機確認):
   - SX1262。SPI は画面と共有 (SCK=20, MOSI=21, MISO=22)。CS=GPIO23 (`LORA_CS`), BUSY=GPIO19, DIO1=GPIO15 (`LORA_IRQ`),
     NRST は無し (RADIOLIB_NC)。**画面 (loop) と LoRa タスクが同じ SPI を使うので `hw::lockBus()` で排他している**
@@ -328,7 +343,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 4. M5StickS3 対応 (ボード依存部を hw_* / tone_out_* / power_* に分離)
 5. LoRa 対応 (Nesso のみ, §4.6)。チャンネル数を 10 → 8 に変更 (ユーザー指示)
 6. RADIO OFF (電波を出さない単独練習モード)
-7. シリアル出力を US-ASCII のみに (2026-10-31)、端末モード `term` を追加
+7. シリアル出力を US-ASCII のみに (2026-10-31)、端末モード `term` を追加 (ユーザー確認済み)
+8. M5StickC Plus2 対応 (2026-10-31, §10)。hw_sticks3.cpp → hw_m5stick.cpp、tone_out_nesso.cpp → tone_out_buzzer.cpp に共通化
 
 ### 次にやること (ユーザー予定)
 - LoRa を距離のある場所で試験する (ユーザーが後日実施)。結果 (最上段の dBm / L / R / W、デコードの具合) を聞いて、
@@ -374,14 +390,14 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   (1 文字 / "[SK]" 略符号 / 空白 = 語間) 設定の WPM で送る。前の文字の終わりから文字間 3 dit (語間 7 dit)。
   送信中はキー・パドル無視。エコーは即時、行頭 "> " (打った文字) / "< " (受信)。BS は未送信分だけ取り消し、
   符号の無い文字は BEL。Ctrl-C / Ctrl-D で終了。端末モード中は log と "settings saved" を出さない。
-  StickS3 (RADIO OFF) でエコー・BS・終了を確認。実際に聞いての確認・2 台間の確認はユーザー未確認
+  StickS3 (RADIO OFF) でエコー・BS・終了を確認。ユーザーが端末モードの動作を確認済み (2 台間の確認はまだ)
 - シリアルコマンド: ch N / radio espnow|lora|off / term / mode / wpm / side N|on|off / rxtone / vol / swap / jitter /
   test on [TEXT] (`[SK]` で文字間なし送信) / test off / loss N / dropup 0|1 / log 0|1 / stats / show / clear / save /
   sleep / help (README に一覧)。`stats` の `|` 以降は送信側 (無線の種類, sent, csBusy, air など)
 - 設定は Preferences (名前空間 "morse") に保存。キー: mode wpm sideon sidehz rxhz vol swap ch radio、
   ジッタ遅延は無線ごとに jitter (ESP-NOW, 既定 150) / ljitter (LoRa, 既定 250)。
-  実機 (2026-10-30 の最終状態): Nesso 101 = STRAIGHT・ESP-NOW、Nesso 1101 = IAMBIC_B・ESP-NOW、StickS3 = IAMBIC_B
-  (ポート番号は接続のたびに変わる)
+  実機 (2026-10-31 の状態): Nesso 2 台 = STRAIGHT / IAMBIC_B・ESP-NOW、StickS3 = STRAIGHT・RADIO OFF (ユーザー設定)、
+  StickC Plus2 = IAMBIC_B・ESP-NOW (ポート番号は接続のたびに変わる)
 - M5StickS3 対応 (2026-10-30): 上記の機能はすべて共通。設定画面はタッチが無いので選択/変更モード
   (選択: A=次, B=変更開始, 長押し=終了 / 変更: A=+, B=-, 長押し=選択へ戻る)。
   ユーザーが StickS3 の設定画面で RADIO を切り替えて OFF モードを確認済み。StickS3 ⇔ Nesso の ESP-NOW 通信も確認済み

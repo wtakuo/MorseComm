@@ -1,11 +1,16 @@
-// tone_out_nesso.cpp — Arduino Nesso N1: 内蔵ブザー (GPIO11 = BEEP_PIN) を LEDC の PWM で駆動
+// tone_out_buzzer.cpp — 内蔵の圧電ブザーを LEDC の PWM で駆動
+// Arduino Nesso N1: GPIO11 (BEEP_PIN) / M5StickC Plus2: G2
 #include "board.h"
-#if defined(BOARD_NESSO_N1)
+#if defined(BOARD_NESSO_N1) || defined(BOARD_STICKC_PLUS2)
 #include "tone_out.h"
 #include <Arduino.h>
 
 namespace {
+#if defined(BOARD_NESSO_N1)
 constexpr int PIN_BUZZER = 11;    // BEEP_PIN
+#else
+constexpr int PIN_BUZZER = 2;
+#endif
 constexpr uint8_t RES_BITS = 10;  // デューティ 0..1023
 // 音量段階ごとのデューティ (50% が最大音量)
 constexpr uint16_t DUTY[ToneOut::VOLUME_MAX + 1] = {0, 8, 32, 96, 256, 512};

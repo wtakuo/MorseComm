@@ -1,4 +1,4 @@
-// MorseComm — ESP-NOW / LoRa による CW (モールス) キーイング伝送 (Arduino Nesso N1 / M5StickS3)
+// MorseComm — ESP-NOW / LoRa による CW (モールス) キーイング伝送 (Arduino Nesso N1 / M5StickS3 / M5StickC Plus2)
 //
 // 構成:
 //   cwTask (engine.cpp, 1ms 周期, 高優先度): キー入力・キーヤー・送信・受信再生・トーン・デコード
@@ -576,9 +576,16 @@ void drainOutput() {
 }  // namespace
 
 void setup() {
+#if ARDUINO_USB_CDC_ON_BOOT
+  // USB CDC (Nesso N1 / StickS3)
   Serial.begin(115200);
   Serial.setTxBufferSize(SERIAL_TX_BUFFER);
   Serial.setTxTimeoutMs(0);  // USB 未接続でも loop() を止めない
+#else
+  // USB-UART 変換チップ (StickC Plus2 の CH9102)。送信バッファは begin の前に設定する
+  Serial.setTxBufferSize(SERIAL_TX_BUFFER);
+  Serial.begin(115200);
+#endif
   loadSettings();
   ui::begin();
   bool ok = engine::begin();
