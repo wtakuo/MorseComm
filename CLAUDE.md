@@ -291,7 +291,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     tools/ser.sh は開いた fd に対して stty する。ポートを開いてもリセットはされなかった
   - 実機: Plus2 ⇔ StickS3 の ESP-NOW 双方向で PARIS 20WPM / CQ TEST 30WPM の DOWN/UP 長を再現 (±1ms)、デコード誤りなし
   - ユーザー確認済み (2026-10-31): 画面の向き・表示、サイドトーン・受信トーン、ボタンの役割 (他機種と同じ)、
-    電池で 3 分後のスリープとボタンでの復帰。**Grove へのキー・パドル接続は未確認** (手元にキーが無いため。後日ユーザーが確認)
+    電池で 3 分後のスリープとボタンでの復帰。Grove へのキー・パドル接続 (G33/G32) も 2026-11-01 にユーザーが確認済み
 - LoRa (Nesso N1, 2026-10-30 調査・実機確認):
   - SX1262。SPI は画面と共有 (SCK=20, MOSI=21, MISO=22)。CS=GPIO23 (`LORA_CS`), BUSY=GPIO19, DIO1=GPIO15 (`LORA_IRQ`),
     NRST は無し (RADIOLIB_NC)。**画面 (loop) と LoRa タスクが同じ SPI を使うので `hw::lockBus()` で排他している**
@@ -349,7 +349,6 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 8. M5StickC Plus2 対応 (2026-10-31, §10)。hw_sticks3.cpp → hw_m5stick.cpp、tone_out_nesso.cpp → tone_out_buzzer.cpp に共通化
 
 ### 次にやること (ユーザー予定)
-- M5StickC Plus2 の Grove にキー・パドルをつないだ動作確認 (ユーザーが後日実施。G33 = ストレート/DIT, G32 = DAH)
 - LoRa を距離のある場所で試験する (ユーザーが後日実施)。結果 (最上段の dBm / L / R / W、デコードの具合) を聞いて、
   必要ならジッタ遅延 (LoRa 既定 250ms)・SF・帯域などを調整する。SF/BW を変えると送信時間が変わるので、
   休止 50ms の条件と送信間隔・ジッタ遅延の関係 (§4.6) を見直すこと
