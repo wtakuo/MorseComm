@@ -14,7 +14,9 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
 - 無線は ESP-NOW が基本。Nesso N1 どうしは LoRa (SX1262, 920MHz 帯) も選べる (設定の RADIO。2026-10-30 追加, §4.6)
 - RADIO = OFF: 電波を出さない単独練習モード (ユーザー要望で追加)。Wi-Fi も LoRa も初期化せず、net::send は何もしない。
   キー・サイドトーン・送信デコード・スリープは通常どおり。メイン画面は灰色の "OFF" / "RADIO OFF"、KEY1 (チャンネル) は無効。
-  設定画面の RADIO は Nesso: ESP-NOW → LoRa → OFF、StickS3: ESP-NOW ↔ OFF (StickS3 にも RADIO 項目が出るようになった)
+  設定画面の RADIO は Nesso: ESP-NOW → LoRa → OFF、StickS3 / StickC Plus2: ESP-NOW ↔ OFF
+- 端末モード (`term`): PC のターミナルで打った文字をモールスで送り、受信文字を表示する (2026-10-31 追加)
+- 対応ボード: Arduino Nesso N1 / M5StickS3 / M5StickC Plus2 (機種が混在しても ESP-NOW で通信できる)
 
 最大の設計課題は「キーを離したパケットが落ちると押しっぱなしになる」問題。
 **イベント(押す/離す)ではなく、状態+遷移履歴を定期送信し、受信側でウォッチドッグを持つ**
@@ -22,11 +24,11 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
 
 ## 2. 環境
 
-- ターゲット: Arduino Nesso N1 (ESP32-C6)
+- ターゲット: Arduino Nesso N1 (ESP32-C6)。その後 M5StickS3 (ESP32-S3)・M5StickC Plus2 (ESP32) を追加 (§10)
   https://docs.arduino.cc/hardware/nesso-n1
 - フレームワーク: Arduino (C++)
 - ビルド: `/opt/homebrew/bin/arduino-cli`
-- 実機: 2台が Mac に接続済み。シリアルポートで区別する
+- 実機: Nesso 2 台・StickS3・StickC Plus2 のうち、その時々につないだものが Mac に接続される。シリアルポートと `show` で区別する
 - **FQBN・必要なボードパッケージ・ディスプレイ/ブザー等のライブラリは、推測せず調べて確認すること。**
   `arduino-cli board list` / `core list` / `core search` / `lib search` を使い、
   確認できた FQBN と手順はこのファイルの §10 に追記する
@@ -261,11 +263,11 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   `SYS_IRQ` = GPIO3 (通常 High) → `esp_sleep_enable_ext1_wakeup_io(1<<3, ANY_LOW)`。実機で復帰を確認 (wake cause = EXT1)
 - 電池: `NessoBattery::getChargeLevel()` (BQ27220) で残量 %。`battery.begin()` は充電設定を書き換えるので呼んでいない
 - シリアル: USB CDC (115200)。`arduino-cli monitor` はパイプ経由だと何も出ないため、
-  `stty -f PORT 115200 raw` + `cat` で読む
+  ポートを開いた fd に対して `stty 115200 raw` してから `cat` で読む (tools/ser.sh)
 - M5StickS3 (2026-10-30 調査・実機確認):
   - FQBN: `m5stack:esp32:m5stack_sticks3` (M5Stack のボードパッケージ 3.3.10。esp32:esp32 には無い)。
     コアのヘッダが NUM_DIGITAL_PINS 等の再定義警告を出すが無害
-  - **2 機種を同じフォルダからビルドするので `--build-path build/<board>` を必ず分ける**
+  - **複数機種を同じフォルダからビルドするので `--build-path build/<board>` を必ず分ける**
     (分けないとビルドキャッシュが共有され、別チップ向けのブートローダを書こうとして失敗する)
   - 画面: ST7789 135x240 を M5GFX が自動判別 (M5.Display)、`setRotation(1)` で 240x135。向きはユーザー確認済み
   - ボタン: BtnA = GPIO11 (正面), BtnB = GPIO12 (側面)、押下 = LOW。電源ボタンは読めなかった
@@ -324,7 +326,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 
 各フェーズの終わりに、ビルドが通りテストが成功する状態でコミットする。
 
-**2026-10-30 時点で全フェーズ完了** (詳細は §13)。
+**2026-10-30 時点で全フェーズ完了**。その後の追加機能・移植は §13。
 
 ## 12. 作業上のルール
 
@@ -336,9 +338,9 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - 破壊的操作 (大規模な削除・書き換え) の前にはユーザーに確認する
 - コードコメントと README は日本語で良い
 
-## 13. 作業状況と再開メモ (2026-10-30 時点)
+## 13. 作業状況と再開メモ (2026-11-01 時点)
 
-### 作業の経緯 (2026-10-30 までのコミット順)
+### 作業の経緯 (コミット順)
 1. Nesso N1 2 台で ESP-NOW の基本機能 (§11 の全フェーズ) → 画面・設定画面の改訂 → オートスリープ → 赤い '?' と [SK]
 2. 通信チャンネルと複数局受信、Nesso のボタン割り当て変更 (KEY1 = チャンネル, KEY2 = 設定)
 3. M5Stack Tab5 の調査 (ESP-NOW が使えず保留, §14)
@@ -346,7 +348,12 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 5. LoRa 対応 (Nesso のみ, §4.6)。チャンネル数を 10 → 8 に変更 (ユーザー指示)
 6. RADIO OFF (電波を出さない単独練習モード)
 7. シリアル出力を US-ASCII のみに (2026-10-31)、端末モード `term` を追加 (ユーザー確認済み)
-8. M5StickC Plus2 対応 (2026-10-31, §10)。hw_sticks3.cpp → hw_m5stick.cpp、tone_out_nesso.cpp → tone_out_buzzer.cpp に共通化
+8. M5StickC Plus2 対応 (2026-10-31, §10)。hw_sticks3.cpp → hw_m5stick.cpp、tone_out_nesso.cpp → tone_out_buzzer.cpp に共通化。
+   2026-11-01 にキー・パドル接続を含めてユーザーが全項目を確認済み
+
+### 現在の状態 (2026-11-01)
+- 3 機種 (Nesso N1 / M5StickS3 / M5StickC Plus2) すべて、ユーザーが実機で動作確認済み。未コミットの変更なし
+- ユーザーから依頼されて未完了の作業はない。予定は下の「次にやること」のみ
 
 ### 次にやること (ユーザー予定)
 - LoRa を距離のある場所で試験する (ユーザーが後日実施)。結果 (最上段の dBm / L / R / W、デコードの具合) を聞いて、
@@ -374,14 +381,15 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     (押し続けで連続)。KEY1/KEY2 長押し または 30 秒無操作で抜けて保存。
     項目: MODE / SPEED / SIDETONE / SIDE FREQ / RX FREQ / VOLUME / PADDLE / RADIO (チャンネルは設定画面に無い)。
     8 項目は画面 (7 行) に収まらないので、選択中の項目が見えるようにスクロールする (ui.cpp の listTop)
-  - RADIO: Nesso は ESP-NOW → LoRa → OFF、StickS3 は ESP-NOW ↔ OFF。動作中と違う値には " *" を付け、
+  - RADIO: Nesso は ESP-NOW → LoRa → OFF、StickS3 / StickC Plus2 は ESP-NOW ↔ OFF。動作中と違う値には " *" を付け、
     設定画面を抜けたときに保存して再起動する (MorseComm.ino の restartIfRadioChanged)
   - 最上段の左端: ESP-NOW = 青地 "CHn"、LoRa = 紫地 "LoRan"、OFF = 灰地 "OFF" + "RADIO OFF"
 - デコード: 解読できない符号は CHAR_UNKNOWN (0x01) として出し、画面では赤い '?'。
   略符号は morse_table.h の prosignTable (現在 `...-.-` → "[SK]" のみ。AR/BT は + / = のままで良いとユーザー確認済み)
 - オートスリープ: 電池運用時 (VIN_DETECT=LOW)、キー・ボタン/タッチ・受信の遷移がどれも 3 分間なければ
   ディープスリープ (画面消灯)。10 秒前から "SLEEP in Ns" を表示。KEY1/KEY2 で復帰 (再起動、押したボタンは無視)。
-  USB 給電中は眠らない。ユーザーが電池で動作確認済み
+  USB 給電中は眠らない (StickC Plus2 は USB 給電を検出できないので USB 接続中も眠る。BtnA/BtnB で復帰)。
+  3 機種ともユーザーが電池で動作確認済み
 - チャンネル: パケットの channel バイト (1..8, config.h の CH_*。2026-10-30 にユーザー指示で 10 → 8)。Preferences に保存。切り替えると受信中の全局を忘れる。
   実機 2 台で、同チャンネルのみ受信・別チャンネルは受信しないことを確認済み。3 局以上はホストテストのみ (実機 2 台しかない)
 - シリアル出力 (2026-10-31, ユーザー要望): **US-ASCII のみ** (help も英語)。日本語を含む長い出力がターミナルで途中で
@@ -418,9 +426,13 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - 書き込み (ボードごとにビルドディレクトリを分ける):
   - Nesso N1: `arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-path build/nesso -u -p PORT .`
   - M5StickS3: `arduino-cli compile -b m5stack:esp32:m5stack_sticks3 --build-path build/sticks3 -u -p PORT .`
+  - M5StickC Plus2: `arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus2 --build-path build/stickcplus2 -u -p PORT .`
+    (ポートは /dev/cu.usbserial-*。Nesso / StickS3 は /dev/cu.usbmodem*)
   - 接続されている機器はセッションによって変わるので、`show` の出力 (power: 行の形式や mode) で判別する
-- シリアル操作: `stty -f PORT 115200 raw -echo` してから fd を開き、コマンドを書き込み、`cat` で読む
-  (`tools/ser.sh PORT 秒数 "cmd1" "cmd2"` でコマンド送信と出力の取得ができる)
+- シリアル操作: `tools/ser.sh PORT 秒数 "cmd1" "cmd2"` でコマンド送信と出力の取得ができる
+  (ポートを開いたまま `stty 115200 raw -echo clocal` してからコマンドを書き込み、`cat` で読む。
+  `stty -f PORT` で先に設定すると、USB-UART (Plus2) は閉じた時点で 9600bps に戻ってしまう)
+- 端末モードの試験: ser.sh は 1 行ずつ送るので、生の文字 (BS, Ctrl-C) を送るには Python で termios を設定して書き込む
 - 典型的な確認: 送信側 `test on PARIS`、受信側 `log 1` → `RX D t=.. prevU=60` 行と `RXCHR` 行を集計。
   ロス注入は送信側 `loss 50` / `dropup 1`
 - LoRa の確認: 両方の Nesso で `radio lora` (再起動する) → 同じ手順。`stats` の csBusy (キャリアセンスで待った回数)、
