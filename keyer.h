@@ -259,4 +259,145 @@ class TextKeyer {
   KeyEventQueue events_;
 };
 
+// 端末モード (シリアルで打った文字を送る) の送信待ちバッファ。
+// 打った側 (loop) が末尾に追加・末尾を取り消し、キーヤー側 (engine) が先頭から 1 単位ずつ取り出す。
+// 排他は呼び出し側で行う
+class TypeBuffer {
+ public:
+  static constexpr int CAP = 128;
+  static constexpr int MAX_UNIT = 12;  // 1 単位の最大長 ("[SK]" などの略符号を含む)
+
+  bool push(char c) {
+    if (len_ >= CAP) return false;
+    buf_[(head_ + len_) % CAP] = c;
+    len_++;
+    return true;
+  }
+  // まだ送り始めていない最後の文字を取り消す
+  bool popBack() {
+    if (len_ == 0) return false;
+    len_--;
+    return true;
+  }
+  void clear() { len_ = 0; }
+  int size() const { return len_; }
+
+  // 先頭の 1 単位を取り出す: 1 文字、空白 (語間)、または "[...]" の略符号。
+  // "[" に対応する "]" がまだ打たれていなければ待つ (false)。out は MAX_UNIT + 1 バイト以上
+  bool takeUnit(char* out) {
+    while (len_ > 0) {
+      char c = at(0);
+      if (c == ']') {  // 対応の無い "]" は捨てる
+        drop(1);
+        continue;
+      }
+      if (c != '[') {
+        out[0] = c;
+        out[1] = 0;
+        drop(1);
+        return true;
+      }
+      int close = -1;
+      for (int i = 1; i < len_ && i <= MAX_UNIT; i++)
+        if (at(i) == ']') {
+          close = i;
+          break;
+        }
+      if (close < 0) {
+        if (len_ <= MAX_UNIT) return false;  // "]" を待つ
+        drop(1);                             // 長すぎる: "[" を捨てて普通の文字として送る
+        continue;
+      }
+      for (int i = 0; i <= close; i++) out[i] = at(i);
+      out[close + 1] = 0;
+      drop(close + 1);
+      return true;
+    }
+    return false;
+  }
+
+ private:
+  char at(int i) const { return buf_[(head_ + i) % CAP]; }
+  void drop(int n) {
+    head_ = (head_ + n) % CAP;
+    len_ -= n;
+  }
+  char buf_[CAP];
+  int head_ = 0, len_ = 0;
+};
+
+// 1 単位ずつ送るキーヤー (端末モード用)。単位は TypeBuffer::takeUnit の出力
+// (1 文字 / "[SK]" のような略符号 = 文字間を空けずに続ける / " " = 語間)。
+// 前の単位の最後の要素から文字間 3 dit (語間なら 7 dit) 空けて次を始める。それ以上空いていればすぐ始める
+class StreamKeyer {
+ public:
+  void setWpm(int wpm) { ditMs_ = ditMsForWpm(wpm); }
+  void reset() {
+    running_ = down_ = hasPrev_ = wordGap_ = false;
+    events_.clear();
+  }
+  // 次の単位を受け付けられる (送信中の単位が終わった)
+  bool ready() const { return !running_; }
+  bool down() const { return down_; }
+
+  // 単位を送り始める。モールス符号の無い文字だけなら false (何もしない)
+  bool send(const char* unit, uint32_t nowMs) {
+    if (unit[0] == ' ' && unit[1] == 0) {
+      wordGap_ = hasPrev_;
+      return true;
+    }
+    len_ = 0;
+    for (const char* p = unit; *p; p++) {
+      const char* code = (*p == '[' || *p == ']') ? nullptr : morseEncode(*p);
+      if (!code) continue;
+      for (; *code && len_ < MAX_SEQ; code++) seq_[len_++] = *code;
+    }
+    if (len_ == 0) return false;
+    uint32_t start = nowMs;
+    if (hasPrev_) {
+      uint32_t earliest = lastEnd_ + (wordGap_ ? 7 : 3) * ditMs_;
+      if ((int32_t)(earliest - nowMs) > 0) start = earliest;
+    }
+    wordGap_ = false;
+    pos_ = 0;
+    tNext_ = start;
+    running_ = true;
+    return true;
+  }
+
+  void update(uint32_t nowMs) {
+    for (int guard = 0; guard < 16 && running_ && (int32_t)(nowMs - tNext_) >= 0; guard++) step();
+  }
+
+  bool pop(KeyEvent& ev) { return events_.pop(ev); }
+
+ private:
+  static constexpr int MAX_SEQ = TypeBuffer::MAX_UNIT * 8;
+
+  void step() {
+    if (!down_) {
+      down_ = true;
+      events_.push(tNext_, 1);
+      tNext_ += (seq_[pos_] == '-' ? 3 : 1) * ditMs_;
+      return;
+    }
+    down_ = false;
+    events_.push(tNext_, 0);
+    if (++pos_ >= len_) {
+      running_ = false;
+      hasPrev_ = true;
+      lastEnd_ = tNext_;
+      return;
+    }
+    tNext_ += ditMs_;  // 要素間
+  }
+
+  char seq_[MAX_SEQ];
+  int len_ = 0, pos_ = 0;
+  uint32_t ditMs_ = 60;
+  uint32_t tNext_ = 0, lastEnd_ = 0;
+  bool running_ = false, down_ = false, hasPrev_ = false, wordGap_ = false;
+  KeyEventQueue events_;
+};
+
 }  // namespace cw

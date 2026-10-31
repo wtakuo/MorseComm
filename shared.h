@@ -26,6 +26,7 @@ struct Control {
   char testText[cw::TextKeyer::MAX_TEXT] = "PARIS";
   uint8_t lossPct = 0;   // 送信を一定確率で省略
   bool dropUp = false;   // state==UP のパケットを省略
+  bool termOn = false;   // 端末モード: シリアルで打った文字 (g_typeBuf) を送る
 };
 
 // cwTask → UI の状態スナップショット
@@ -66,3 +67,4 @@ extern Control g_control;
 extern uint32_t g_controlVer;
 extern Snapshot g_snapshot;
 extern bool g_logOn;
+extern cw::TypeBuffer g_typeBuf;  // 端末モードの送信待ち文字 (lockShared で保護)

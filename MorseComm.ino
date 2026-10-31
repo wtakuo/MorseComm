@@ -24,6 +24,7 @@ Control g_control;
 uint32_t g_controlVer = 0;
 Snapshot g_snapshot;
 bool g_logOn = false;
+cw::TypeBuffer g_typeBuf;
 
 namespace {
 
@@ -33,6 +34,9 @@ constexpr uint32_t SAVE_DELAY_MS = 2000;      // 最後の変更からこの時�
 constexpr uint32_t STATS_INTERVAL_MS = 5000;  // log on のときの統計出力間隔
 constexpr uint32_t BATTERY_INTERVAL_MS = 5000;
 constexpr uint32_t SETTINGS_TIMEOUT_MS = 30000;  // 設定画面を無操作で抜けるまで
+// USB シリアルの送信バッファ。既定 (256) では長い出力 (help など) が途中で切れる
+// (USB 未接続でも止まらないよう送信タイムアウトを 0 にしているため、入りきらない分は捨てられる)
+constexpr size_t SERIAL_TX_BUFFER = 4096;
 
 Preferences prefs;
 ui::Item selected = ui::Item::Mode;
@@ -47,6 +51,10 @@ uint32_t lastInputMs = 0;  // ボタン・タッチ・シリアル入力、USB �
 bool usbPower = true;
 char lineBuf[96];
 int lineLen = 0;
+// 端末モード (シリアルで打った文字を送り、受信した文字を表示する)
+bool termMode = false;
+char termDir = 0;        // 最後に表示した向き: '>' = 打った文字, '<' = 受信した文字
+bool termLastCr = false;  // 直前が CR (CR LF を 1 回の改行として扱う)
 
 // ---- 設定 ----
 // このボードで選べる無線の種類 (設定画面ではこの順に切り替わる)
@@ -134,7 +142,7 @@ void saveSettings() {
   prefs.putUChar("radio", s.radio);
   prefs.end();
   saveDirty = false;
-  Serial.println("settings saved");
+  if (!termMode) Serial.println("settings saved");
 }
 
 template <typename F>
@@ -185,15 +193,20 @@ void printStats() {
       sn.net.rxDropped, sn.net.rxErr, sn.net.csBusy, sn.net.airMs);
 }
 
+// シリアルへの出力は US-ASCII だけにする (端末によっては UTF-8 で表示が乱れるため)
 void printHelp() {
   Serial.printf(
       "commands:\n"
-      "  ch N  (通信チャンネル %d-%d)   radio espnow|lora|off  (無線の種類。off は電波を出さない。切り替えると再起動)\n"
-      "  mode straight|iambic_a|iambic_b   wpm N   vol 0-5   swap 0|1   jitter N\n"
-      "  side N|on|off  (サイドトーン周波数 / ON・OFF)   rxtone N  (受信トーン周波数)\n"
-      "  test on [TEXT] | test off          (TEXT を現在の WPM で自動キーイング)\n"
-      "  loss N   (送信を N%% 省略)   dropup 0|1 (UP のパケットを省略)\n"
-      "  log 0|1  (遷移ログと定期統計)   stats   show   clear   sleep   help\n",
+      "  ch N              channel (%d-%d)\n"
+      "  radio espnow|lora|off   radio type (off = no transmission; restarts)\n"
+      "  mode straight|iambic_a|iambic_b\n"
+      "  wpm N             keyer speed   vol 0-5   swap 0|1 (paddle)   jitter N (ms)\n"
+      "  side N|on|off     sidetone freq / on / off   rxtone N   receive tone freq\n"
+      "  term              terminal mode: type to send, received text is shown (Ctrl-C to quit)\n"
+      "  test on [TEXT] | test off   send TEXT repeatedly at the current WPM\n"
+      "  loss N            drop N%% of sent packets   dropup 0|1   drop packets with key UP\n"
+      "  log 0|1           transition log and stats every 5 s\n"
+      "  stats   show   clear   save   sleep   help\n",
       cfg::CH_MIN, cfg::CH_MAX);
 }
 
@@ -238,6 +251,74 @@ void restartIfRadioChanged() {
   net::end();
   delay(50);
   ESP.restart();
+}
+
+// ---- 端末モード ----
+// 打った文字は送信待ちに入れてすぐ表示する (エコー)。受信した文字は届いた順に表示する。
+// 向きが変わったら改行して "> " (打った文字) / "< " (受信) を付ける
+void termMark(char dir) {
+  if (termDir == dir) return;
+  Serial.printf("\r\n%c ", dir);
+  termDir = dir;
+}
+
+void enterTerm(bool on) {
+  termMode = on;
+  termDir = 0;
+  lockShared();
+  g_typeBuf.clear();
+  if (on) g_logOn = false;
+  unlockShared();
+  editControl([&](Control& c) {
+    c.termOn = on;
+    if (on) c.testOn = false;
+  });
+  if (on) {
+    lockShared();
+    int wpm = g_settings.wpm;
+    unlockShared();
+    Serial.printf("\r\n[terminal mode: %d WPM. Type to send; received text follows '<'. Ctrl-C to quit]\r\n", wpm);
+  } else {
+    Serial.print("\r\n[terminal mode off]\r\n");
+  }
+}
+
+void handleTermChar(char ch) {
+  if (ch == 0x03 || ch == 0x04) {  // Ctrl-C / Ctrl-D
+    enterTerm(false);
+    return;
+  }
+  bool lf = ch == '\n';
+  if (lf && termLastCr) {  // CR LF
+    termLastCr = false;
+    return;
+  }
+  termLastCr = ch == '\r';
+  bool newline = ch == '\r' || lf;
+  if (newline) ch = ' ';  // 改行は語間として送る
+  if (ch == '\b' || ch == 0x7F) {
+    lockShared();
+    bool ok = g_typeBuf.popBack();
+    unlockShared();
+    if (ok && termDir == '>') Serial.print("\b \b");
+    else Serial.write('\a');  // 送り始めた文字は取り消せない
+    return;
+  }
+  if (ch >= 'a' && ch <= 'z') ch -= 'a' - 'A';
+  bool valid = ch == ' ' || ch == '[' || ch == ']' || cw::morseEncode(ch);
+  bool ok = false;
+  if (valid) {
+    lockShared();
+    ok = g_typeBuf.push(ch);
+    unlockShared();
+  }
+  if (!ok) {
+    Serial.write('\a');  // 符号の無い文字、またはバッファが一杯
+    return;
+  }
+  termMark('>');
+  if (newline) Serial.print("\r\n> ");
+  else Serial.write(ch);
 }
 
 // ---- シリアルコマンド ----
@@ -300,6 +381,9 @@ void handleCommand(char* line) {
     editControl([&](Control& c) { c.lossPct = n < 0 ? 0 : n > 100 ? 100 : n; });
   } else if (!strcmp(cmd, "dropup") && arg) {
     editControl([&](Control& c) { c.dropUp = n != 0; });
+  } else if (!strcmp(cmd, "term")) {
+    enterTerm(true);
+    return;
   } else if (!strcmp(cmd, "log") && arg) {
     lockShared();
     g_logOn = n != 0;
@@ -329,6 +413,11 @@ void handleCommand(char* line) {
 void pollSerial() {
   while (Serial.available()) {
     char ch = Serial.read();
+    if (termMode) {
+      lastInputMs = millis();
+      handleTermChar(ch);
+      continue;
+    }
     if (ch == '\r' || ch == '\n') {
       if (lineLen) {
         lineBuf[lineLen] = 0;
@@ -460,7 +549,12 @@ void drainOutput() {
       case OutItem::CharTx:
       case OutItem::CharRx:
         ui::addChar(it.kind == OutItem::CharRx, it.c);
-        if (g_logOn) {
+        if (termMode) {
+          if (it.kind == OutItem::CharRx) {
+            termMark('<');
+            Serial.write(it.c == cw::CHAR_UNKNOWN ? '?' : it.c);
+          }
+        } else if (g_logOn) {
           const char* tag = it.kind == OutItem::CharRx ? "RXCHR" : "TXCHR";
           if (it.c == cw::CHAR_UNKNOWN) Serial.printf("%s <unknown>\n", tag);
           else Serial.printf("%s '%c'\n", tag, it.c);
@@ -483,6 +577,7 @@ void drainOutput() {
 
 void setup() {
   Serial.begin(115200);
+  Serial.setTxBufferSize(SERIAL_TX_BUFFER);
   Serial.setTxTimeoutMs(0);  // USB 未接続でも loop() を止めない
   loadSettings();
   ui::begin();

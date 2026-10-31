@@ -23,6 +23,7 @@ ToneOut toneOut;
 cw::Debouncer dbStraight, dbDit, dbDah;
 cw::IambicKeyer iambic;
 cw::TextKeyer textKeyer;
+cw::StreamKeyer streamKeyer;  // 端末モード
 cw::TxHistory hist;
 cw::TxScheduler sched;
 cw::PeerTable peers;
@@ -82,6 +83,7 @@ void setLocal(uint8_t st, uint32_t t) {
 
 void applySettings(uint32_t now, bool modeChanged) {
   iambic.setWpm(set.wpm);
+  streamKeyer.setWpm(set.wpm);
   iambic.setModeB(set.mode == (uint8_t)cw::KeyMode::IambicB);
   toneOut.setVolume(set.volume);
   peers.setDelay(set.jitterMs);
@@ -128,9 +130,31 @@ void syncShared(uint32_t now) {
     textKeyer.stop();
     setLocal(0, now);
   }
+  if (ctl.termOn != oldCtl.termOn) {
+    streamKeyer.reset();
+    setLocal(0, now);
+  }
+}
+
+// 端末モード: 打たれた文字を 1 単位ずつ送る。送信中 (文字間の待ちを含む) なら true
+bool streamKeys(uint32_t now) {
+  char unit[cw::TypeBuffer::MAX_UNIT + 1];
+  while (streamKeyer.ready()) {
+    lockShared();
+    bool got = g_typeBuf.takeUnit(unit);
+    unlockShared();
+    if (!got) break;
+    streamKeyer.send(unit, now);
+  }
+  streamKeyer.update(now);
+  cw::KeyEvent ev;
+  while (streamKeyer.pop(ev)) setLocal(ev.state, ev.t);
+  return !streamKeyer.ready();
 }
 
 void readKeys(uint32_t now) {
+  // 端末モードで文字を送っている間はキー・パドルを無視する (送っていなければ普通に使える)
+  if (ctl.termOn && streamKeys(now)) return;
   if (ctl.testOn) {
     textKeyer.update(now);
     cw::KeyEvent ev;

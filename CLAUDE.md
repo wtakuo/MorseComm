@@ -328,13 +328,14 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 4. M5StickS3 対応 (ボード依存部を hw_* / tone_out_* / power_* に分離)
 5. LoRa 対応 (Nesso のみ, §4.6)。チャンネル数を 10 → 8 に変更 (ユーザー指示)
 6. RADIO OFF (電波を出さない単独練習モード)
+7. シリアル出力を US-ASCII のみに (2026-10-31)、端末モード `term` を追加
 
 ### 次にやること (ユーザー予定)
 - LoRa を距離のある場所で試験する (ユーザーが後日実施)。結果 (最上段の dBm / L / R / W、デコードの具合) を聞いて、
   必要ならジッタ遅延 (LoRa 既定 250ms)・SF・帯域などを調整する。SF/BW を変えると送信時間が変わるので、
   休止 50ms の条件と送信間隔・ジッタ遅延の関係 (§4.6) を見直すこと
 
-### 実装済み (すべて実機で確認済み、ホストテスト 116 件合格、git にコミット済み)
+### 実装済み (すべて実機で確認済み、ホストテスト 124 件合格、git にコミット済み)
 - §4 の通信方式どおり: 状態+遷移履歴の定期送信、tid による重複/逆順対応、再同期、ジッタバッファ (150ms)、
   時刻オフセット = 直近 4 秒の (rx - tx) 最小値、ウォッチドッグ (再生時間軸で「最新パケットの送信時刻 + 100ms」を
   越えて DOWN なら強制 UP。同じ tid で DOWN のパケットが来たら REASSERT で再開)
@@ -365,7 +366,16 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   USB 給電中は眠らない。ユーザーが電池で動作確認済み
 - チャンネル: パケットの channel バイト (1..8, config.h の CH_*。2026-10-30 にユーザー指示で 10 → 8)。Preferences に保存。切り替えると受信中の全局を忘れる。
   実機 2 台で、同チャンネルのみ受信・別チャンネルは受信しないことを確認済み。3 局以上はホストテストのみ (実機 2 台しかない)
-- シリアルコマンド: ch N / radio espnow|lora|off / mode / wpm / side N|on|off / rxtone / vol / swap / jitter /
+- シリアル出力 (2026-10-31, ユーザー要望): **US-ASCII のみ** (help も英語)。日本語を含む長い出力がターミナルで途中で
+  切れていた原因は、USB CDC (HWCDC) の送信バッファ既定 256 バイト + `setTxTimeoutMs(0)` で入りきらない分が捨てられること。
+  `Serial.setTxBufferSize(4096)` で対処 (SERIAL_TX_BUFFER)。シリアルに出す文字列に日本語を入れないこと
+- 端末モード `term` (2026-10-31, ユーザー要望): PC のターミナルで打った文字を送り、受信文字を表示する。
+  loop が `g_typeBuf` (keyer.h の TypeBuffer, lockShared で保護) に積み、engine の StreamKeyer が 1 単位ずつ
+  (1 文字 / "[SK]" 略符号 / 空白 = 語間) 設定の WPM で送る。前の文字の終わりから文字間 3 dit (語間 7 dit)。
+  送信中はキー・パドル無視。エコーは即時、行頭 "> " (打った文字) / "< " (受信)。BS は未送信分だけ取り消し、
+  符号の無い文字は BEL。Ctrl-C / Ctrl-D で終了。端末モード中は log と "settings saved" を出さない。
+  StickS3 (RADIO OFF) でエコー・BS・終了を確認。実際に聞いての確認・2 台間の確認はユーザー未確認
+- シリアルコマンド: ch N / radio espnow|lora|off / term / mode / wpm / side N|on|off / rxtone / vol / swap / jitter /
   test on [TEXT] (`[SK]` で文字間なし送信) / test off / loss N / dropup 0|1 / log 0|1 / stats / show / clear / save /
   sleep / help (README に一覧)。`stats` の `|` 以降は送信側 (無線の種類, sent, csBusy, air など)
 - 設定は Preferences (名前空間 "morse") に保存。キー: mode wpm sideon sidehz rxhz vol swap ch radio、

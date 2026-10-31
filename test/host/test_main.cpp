@@ -629,6 +629,70 @@ static void testLossSim() {
 
 
 // =================================================================
+// 端末モード: 打った文字を 1 単位ずつ送る
+// typed[i].first の時刻に typed[i].second を打つ (BS は取り消し)
+static std::vector<Tr> runStream(const std::vector<std::pair<uint32_t, std::string>>& typed, int wpm, uint32_t endMs) {
+  TypeBuffer buf;
+  StreamKeyer k;
+  k.setWpm(wpm);
+  std::vector<Tr> out;
+  size_t ti = 0;
+  KeyEvent ev;
+  for (uint32_t t = 0; t < endMs; t++) {
+    while (ti < typed.size() && typed[ti].first <= t) {
+      for (char c : typed[ti].second) {
+        if (c == '\b') buf.popBack();
+        else buf.push(c);
+      }
+      ti++;
+    }
+    char unit[TypeBuffer::MAX_UNIT + 1];
+    while (k.ready() && buf.takeUnit(unit)) k.send(unit, t);
+    k.update(t);
+    while (k.pop(ev)) out.push_back({ev.t, ev.state});
+  }
+  return out;
+}
+
+static void testStream() {
+  printf("[keyer] terminal stream\n");
+  // 一度に打った "CQ DE" は TextKeyer と同じタイミング (文字間 3 dit, 語間 7 dit)
+  {
+    auto tl = runStream({{100, "CQ DE"}}, 20, 10000);
+    std::string d = decodeTimeline(tl);
+    CHECK(d == "CQ DE ", "decoded '%s'", d.c_str());
+    auto ref = textOnce("CQ DE", 20, 100);
+    bool same = ref.size() == tl.size();
+    for (size_t i = 0; same && i < tl.size(); i++) same = ref[i].t == tl[i].t && ref[i].s == tl[i].s;
+    CHECK(same, "same timing as TextKeyer (n=%zu ref=%zu)", tl.size(), ref.size());
+  }
+  // 1 文字ずつゆっくり打つ: 前の文字から十分空いていればすぐ始める
+  {
+    auto tl = runStream({{0, "E"}, {1000, "T"}}, 20, 3000);
+    CHECK(tl.size() == 4 && tl[0].t == 0 && tl[2].t == 1000, "starts immediately when idle (%u)", tl.size() > 2 ? tl[2].t : 0);
+  }
+  // 送信中に次の文字: 前の文字の終わりから 3 dit 後
+  {
+    auto tl = runStream({{0, "E"}, {10, "E"}}, 20, 2000);
+    CHECK(tl.size() == 4 && tl[1].t == 60 && tl[2].t == 60 + 180, "char gap (%u)", tl.size() > 2 ? tl[2].t : 0);
+  }
+  // 略符号 [SK] は文字間なし、取り消し (BS) はまだ送っていない文字だけ
+  {
+    auto tl = runStream({{0, "K"}, {5, "X\b"}, {6, "[S"}, {700, "K]"}}, 20, 6000);
+    std::string d = decodeTimeline(tl);
+    CHECK(d == "K [SK] " || d == "K[SK] ", "decoded '%s'", d.c_str());
+    TypeBuffer b;
+    char u[TypeBuffer::MAX_UNIT + 1];
+    b.push('[');
+    b.push('A');
+    CHECK(!b.takeUnit(u), "wait for ]");
+    b.push(']');
+    CHECK(b.takeUnit(u) && !strcmp(u, "[A]"), "unit '%s'", u);
+    CHECK(!b.popBack(), "nothing to cancel");
+  }
+}
+
+// =================================================================
 // 複数局: 局ごとに独立して復元・デコードし、トーンは OR
 static void testPeers() {
   printf("[peers] multi-station\n");
@@ -711,6 +775,7 @@ int main() {
   testScheduler();
   testKeyer();
   testDecoder();
+  testStream();
   testLossSim();
   testPeers();
   printf("\n%d passed, %d failed\n", g_pass, g_fail);
