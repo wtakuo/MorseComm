@@ -350,7 +350,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - loadSettings は M5.begin (ui::begin) の後に呼ぶようにした (ADV の判別が要るため)
   - Grove (G1 = ストレート/DIT, G2 = DAH)、G0 ボタン、スリープ (G0 で復帰、バックライト G38 を保持) は初代と同じ
   - 実機: ADV ⇔ StickS3 の ESP-NOW 双方向で PARIS / CQ TEST を再現 (±1ms)、デコード誤りなし。`output` コマンドを確認
-  - 画面・音 (スピーカー / ヘッドフォン)・キーボード・ボタン・スリープ・キーの接続はユーザー未確認
+  - ユーザー確認済み (2026-11-01): 画面、スピーカーの音、ヘッドフォン (差すとスピーカーが止まる・PHONES の音量段階は適切)、
+    キーボードでの送信と設定画面の操作、Grove のキー・パドル、電池でのスリープと G0 での復帰
 - LoRa (Nesso N1, 2026-10-30 調査・実機確認):
   - SX1262。SPI は画面と共有 (SCK=20, MOSI=21, MISO=22)。CS=GPIO23 (`LORA_CS`), BUSY=GPIO19, DIO1=GPIO15 (`LORA_IRQ`),
     NRST は無し (RADIOLIB_NC)。**画面 (loop) と LoRa タスクが同じ SPI を使うので `hw::lockBus()` で排他している**
@@ -416,7 +417,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
 - M5StickC Plus (旧モデル, AXP192) へ移植済み (2026-11-01, 2 台。§10)。全項目をユーザーが確認済み
-- 5 機種 (Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus / Cardputer) すべてユーザーが実機で動作確認済み
+- 6 機種 (Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus / Cardputer / Cardputer ADV) すべてユーザーが実機で動作確認済み
 
 ### 次にやること (ユーザー予定)
 - LoRa を距離のある場所で試験する (ユーザーが後日実施)。結果 (最上段の dBm / L / R / W、デコードの具合) を聞いて、
