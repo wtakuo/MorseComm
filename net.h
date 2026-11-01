@@ -1,6 +1,8 @@
-// net.h — 無線の送受信 (ESP-NOW / LoRa 共通のインターフェース)
-// 受信は割り込み・コールバックで受信時刻を記録してキューに積むだけにし、処理は呼び出し側タスクで行う。
-// 実装: net.cpp (共通部: 受信キュー・統計・ロス注入) / net_espnow.cpp / net_lora.cpp (Nesso N1 のみ)
+// net.h - Radio send/receive (common interface for ESP-NOW / LoRa)
+// Reception only records the receive time in the interrupt/callback and pushes
+// it to a queue; processing is done in the caller's task. Implementation:
+// net.cpp (common part: receive queue, stats, loss injection) / net_espnow.cpp
+// / net_lora.cpp (Nesso N1 only)
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
@@ -9,39 +11,46 @@
 namespace net {
 
 struct RxItem {
-  uint32_t rxMs;   // 受信した瞬間の millis()
-  int8_t rssi;     // dBm (LoRa は LNA の利得を差し引いた、アンテナ端の値)
-  uint8_t len;
-  uint8_t src[6];  // 送信元 (ESP-NOW: MAC アドレス / LoRa: パケットに載せた送信元の MAC アドレス)
-  uint8_t data[cw::PKT_MAX_SIZE];
+    uint32_t rxMs;  // millis() at the moment of reception
+    int8_t rssi;    // dBm (for LoRa, the value at the antenna with the LNA gain
+                    // subtracted)
+    uint8_t len;
+    uint8_t src[6];  // Sender (ESP-NOW: MAC address / LoRa: sender MAC address
+                     // carried in the packet)
+    uint8_t data[cw::PKT_MAX_SIZE];
 };
 
 struct Stats {
-  uint32_t sent = 0;       // 送信した (ESP-NOW: esp_now_send 成功 / LoRa: 送信完了)
-  uint32_t sendErr = 0;    // 送信エラー
-  uint32_t cbOk = 0;       // ESP-NOW 送信コールバック: 成功
-  uint32_t cbFail = 0;     // ESP-NOW 送信コールバック: 失敗 (ブロードキャストでは通常発生しない)
-  uint32_t rxDropped = 0;  // 受信キューあふれ
-  uint32_t rxErr = 0;      // LoRa: CRC エラーなど
-  uint32_t injected = 0;   // ロス注入で送らなかった
-  uint32_t csBusy = 0;     // LoRa: キャリアセンスで他局の電波を検出して待った回数
-  uint32_t airMs = 0;      // LoRa: 送信時間の合計
+    uint32_t sent = 0;     // Sent (ESP-NOW: esp_now_send succeeded / LoRa:
+                           // transmission complete)
+    uint32_t sendErr = 0;  // Send errors
+    uint32_t cbOk = 0;     // ESP-NOW send callback: success
+    uint32_t cbFail = 0;   // ESP-NOW send callback: failure (normally does not
+                           // occur with broadcast)
+    uint32_t rxDropped = 0;  // Receive queue overflow
+    uint32_t rxErr = 0;      // LoRa: CRC errors etc.
+    uint32_t injected = 0;   // Not sent due to loss injection
+    uint32_t csBusy = 0;     // LoRa: number of times carrier sense detected
+                             // another station's signal and waited
+    uint32_t airMs = 0;      // LoRa: total transmit (air) time
 };
 
-// radio = cfg::RADIO_*。RADIO_OFF なら Wi-Fi も LoRa も初期化しない (電波を出さない)
+// radio = cfg::RADIO_*. With RADIO_OFF, neither Wi-Fi nor LoRa is initialized
+// (no RF emission)
 bool begin(uint8_t radio, uint8_t channel);
 uint8_t radio();
-// 送る (RADIO_OFF では何もしない)。LoRa は最新の 1 パケットだけを保持し、送信できる時になったら送る (古いものは上書き)
+// Send (does nothing with RADIO_OFF). LoRa keeps only the latest packet and
+// sends it when transmission is allowed (older ones are overwritten)
 bool send(const uint8_t* data, size_t len);
-bool receive(RxItem& item);  // キューから1つ取り出す (待たない)
-// 通信チャンネルが変わった (LoRa は周波数を変える)
+bool receive(RxItem& item);  // Take one item from the queue (does not wait)
+// The communication channel changed (LoRa changes frequency)
 void setChannel(uint8_t channel);
-// 実機試験用のロス注入 (送信の直前に判定する)
+// Loss injection for hardware testing (decided right before sending)
 void setLossInjection(uint8_t pct, bool dropUp);
-// スリープ前に無線を止める
+// Stop the radio before sleep
 void end();
 Stats stats();
 void ownMac(uint8_t mac[6]);
-bool loraAvailable();  // このボードで LoRa が使えるか
+bool loraAvailable();  // Whether LoRa is available on this board
 
 }  // namespace net

@@ -1,0 +1,14 @@
+# Code style for MorseComm (clang-format). Format with:
+#   clang-format -i *.cpp *.h test/host/*.cpp
+#   clang-format --assume-filename=MorseComm.cpp < MorseComm.ino > tmp && mv tmp MorseComm.ino
+BasedOnStyle: Google
+IndentWidth: 4
+ContinuationIndentWidth: 4
+AccessModifierOffset: -2
+UseTab: Never
+ColumnLimit: 80
+SortIncludes: Never
+IncludeBlocks: Preserve
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReflowComments: true

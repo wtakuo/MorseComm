@@ -1,5 +1,6 @@
-// ui.h — 画面表示とボタン・タッチ入力 (240x135 の横長画面。ボードの違いは hw.h が吸収する)
-// I2C を使うので loop() 側からのみ呼ぶこと。
+// ui.h - Screen display and button/touch input (240x135 landscape screen; board
+// differences are absorbed by hw.h) Uses I2C, so call only from the loop()
+// side.
 #pragma once
 #include <stdint.h>
 #include "shared.h"
@@ -7,14 +8,29 @@
 
 namespace ui {
 
-// 設定画面の項目。並び順がそのまま画面の表示順 (2026-11-01 ユーザー指定)
-// Output = 音の出口 (スピーカー / ヘッドフォン。ヘッドフォン端子のある Cardputer ADV だけに出す)
-// Defaults = すべての設定を既定値に戻す (2 回押して実行)
-enum class Item : uint8_t { Radio, Mode, Swap, Wpm, SideOn, Output, Volume, SideHz, RxHz, Defaults, Count };
+// Settings screen items. The order is the display order on screen (specified by
+// the user, 2026-11-01) Output = audio output (speaker / headphones; shown only
+// on Cardputer ADV, which has a headphone jack) Defaults = restore all settings
+// to defaults (press twice to execute)
+enum class Item : uint8_t {
+    Radio,
+    Mode,
+    Swap,
+    Wpm,
+    SideOn,
+    Output,
+    Volume,
+    SideHz,
+    RxHz,
+    Defaults,
+    Count
+};
 
-// DEFAULTS 項目の表示状態: 未操作 / 1 回押した (もう 1 回で実行) / 実行した
+// Display state of the DEFAULTS item: idle / pressed once (press again to
+// execute) / executed
 enum class DefaultsState : uint8_t { Idle, Armed, Done };
-// このボードで表示する項目の数と、表示順の index ⇔ 項目の変換。項目の移動は stepItem を使うこと
+// Number of items shown on this board, and conversion between display index <->
+// item. Use stepItem to move between items
 int itemCount();
 Item itemAt(int index);
 int itemIndex(Item it);
@@ -23,34 +39,40 @@ Item stepItem(Item it, int dir);
 enum class Button : uint8_t { None, Key1Short, Key1Long, Key2Short, Key2Long };
 
 struct TouchEvent {
-  enum Kind : uint8_t { None, Plus, Minus, Row } kind = None;
-  int row = 0;      // kind == Row のとき、タッチされた設定項目
-  bool repeat = false;  // +/- の押し続けによる連続イベント
-  int16_t x = 0, y = 0;
+    enum Kind : uint8_t { None, Plus, Minus, Row } kind = None;
+    int row = 0;          // When kind == Row, the touched settings item
+    bool repeat = false;  // Repeated event from holding down +/-
+    int16_t x = 0, y = 0;
 };
 
 using Battery = hw::Battery;
 
 void begin();
-// 画面を消す (スリープ前)
+// Turn off the screen (before sleep)
 void sleepDisplay();
-// 起動時のスプラッシュスクリーン: 中央に "MorseComm"、その下にビルド日時と git のコミットハッシュ
+// Splash screen at startup: "MorseComm" in the center, with the build date/time
+// and git commit hash below it
 void drawSplash(const char* buildStamp, const char* commit);
 void addChar(bool rx, char c);
 void clearText();
 
 Button pollButtons(uint32_t nowMs);
-// 設定画面でのタッチ (押した瞬間だけイベントを返す)
+// Touch on the settings screen (returns an event only at the moment of
+// pressing)
 TouchEvent pollTouch(bool settingsScreen);
 Battery readBattery();
 bool touchAvailable();
 
-// sleepInSec >= 0 のとき、スリープまでの残り秒数を表示する。showChannel のときチャンネル番号を大きく表示する
-// pending: 打ったがまだ送っていない文字 (TX の行に灰色で出す)
-void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec,
-              bool showChannel, const char* pending = nullptr);
-// editing: タッチの無いボードで、選択中の項目の値を変更中 (ボタンが +/- になる)
-void drawSettings(const Settings& s, Item selected, bool editing, const Battery& bat,
+// When sleepInSec >= 0, show the remaining seconds until sleep. When
+// showChannel, show the channel number large pending: characters typed but not
+// yet sent (shown in gray on the TX line)
+void drawMain(const Settings& s, const Control& c, const Snapshot& snap,
+              const Battery& bat, int sleepInSec, bool showChannel,
+              const char* pending = nullptr);
+// editing: on boards without touch, the selected item's value is being changed
+// (buttons act as +/-)
+void drawSettings(const Settings& s, Item selected, bool editing,
+                  const Battery& bat,
                   DefaultsState defaults = DefaultsState::Idle);
 
 }  // namespace ui

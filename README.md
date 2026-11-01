@@ -1,364 +1,370 @@
-# MorseComm — ESP-NOW / LoRa による CW キーイング伝送
+# MorseComm - CW keying transmission over ESP-NOW / LoRa
 
-Arduino Nesso N1 (ESP32-C6)、M5StickS3 / Cardputer (ESP32-S3)、M5StickC Plus2 / M5StickC Plus (ESP32) の間で、ESP-NOW (Wi-Fi ルータ不要) を使ってモールス符号のキーイングを双方向に伝送します。
-Nesso N1 どうしなら、ESP-NOW の代わりに **LoRa (920MHz 帯)** でも通信できます ([LoRa](#lora-nesso-n1-のみ))。どちらも親機・子機の区別のない対等な通信です。
-電波を出さない **OFF** にすると、1 台だけでモールス送信の練習に使えます (サイドトーンと送信テキストのデコードは動きます)。
-PC のターミナルから文字を打って送り、受信した文字をターミナルに表示する**端末モード**もあります ([端末モード](#端末モード-term))。
+Japanese version: [README.ja.md](README.ja.md)
 
-- 無線機のように「チャンネル」(1〜8) があり、同じチャンネルに合わせた局どうしが通信します。3 台以上でも同じチャンネルなら全員の符号が聞こえます。
+MorseComm transmits Morse code keying in both directions between Arduino Nesso N1 (ESP32-C6), M5StickS3 / Cardputer (ESP32-S3), and M5StickC Plus2 / M5StickC Plus (ESP32) boards, using ESP-NOW (no Wi-Fi router needed).
+Between Nesso N1 boards, **LoRa (920 MHz band)** can be used instead of ESP-NOW ([LoRa](#lora-nesso-n1-only)). Both are peer-to-peer, with no distinction between master and slave units.
+With the radio set to **OFF**, no radio waves are emitted, and a single unit can be used for Morse sending practice (the sidetone and decoding of the sent text still work).
+There is also a **terminal mode** in which you type characters in a terminal on a PC to send them, and received characters are shown in the terminal ([Terminal mode](#terminal-mode-term)).
 
-- 相手のキー操作に合わせて受信トーンを鳴らします。自分のキー操作にはサイドトーンを鳴らします。
-- 受信した符号と自分が送った符号をデコードし、画面に表示します。
-- ストレートキーとアイアンビックパドル (Mode A / B) の両方に対応します。
-- パケットが落ちても押しっぱなしにならないことを最優先に設計しています ([仕組み](#仕組み))。
+- Like a radio, there are "channels" (1 to 8), and stations tuned to the same channel communicate with each other. With three or more units, everyone on the same channel hears everyone's code.
 
-## ハードウェア
+- A receive tone is played following the other station's keying. A sidetone is played for your own keying.
+- Both received code and the code you send are decoded and shown on the screen.
+- Both straight keys and iambic paddles (Mode A / B) are supported.
+- The top design priority is that the key never gets stuck down when packets are lost ([How it works](#how-it-works)).
 
-対応ボードは次の 5 機種です。機種が混在していても通信できます。
+## Hardware
 
-| 項目 | Arduino Nesso N1 | M5StickS3 | M5StickC Plus2 | M5StickC Plus |
+The following five models are supported. Different models can communicate with each other.
+
+| Item | Arduino Nesso N1 | M5StickS3 | M5StickC Plus2 | M5StickC Plus |
 |---|---|---|---|---|
 | MCU | ESP32-C6 | ESP32-S3 | ESP32 (PICO-V3-02) | ESP32 (PICO-D4) |
-| ストレートキー | GPIO4 (Grove の 4 番ピン) | GPIO10 (Grove の 4 番ピン) | G33 (Grove の白線) | G33 (Grove の白線) |
-| パドル | DIT = GPIO4, DAH = GPIO5 | DIT = GPIO10, DAH = GPIO9 | DIT = G33, DAH = G32 (黄線) | DIT = G33, DAH = G32 (黄線) |
-| 音 | 内蔵ブザー (GPIO11, PWM) | 内蔵スピーカー (ES8311, I2S) | 内蔵ブザー (G2, PWM) | 内蔵ブザー (G2, PWM) |
-| 画面 | 1.14" 240×135、タッチ対応 | 1.14" 240×135、タッチなし | 1.14" 240×135、タッチなし | 1.14" 240×135、タッチなし |
-| ボタン | KEY1 (正面), KEY2 (側面) | BtnA (正面), BtnB (側面) | BtnA (正面), BtnB (側面) | BtnA (正面), BtnB (側面) |
-| 無線 | ESP-NOW / LoRa (SX1262) / OFF | ESP-NOW / OFF | ESP-NOW / OFF | ESP-NOW / OFF |
-| 電源管理 | AW32001 + BQ27220 | M5PM1 | なし (G4 で電源保持) | AXP192 |
-| USB シリアル | USB CDC | USB CDC | USB-UART (CH9102) | USB-UART (FTDI) |
+| Straight key | GPIO4 (Grove pin 4) | GPIO10 (Grove pin 4) | G33 (Grove white wire) | G33 (Grove white wire) |
+| Paddle | DIT = GPIO4, DAH = GPIO5 | DIT = GPIO10, DAH = GPIO9 | DIT = G33, DAH = G32 (yellow wire) | DIT = G33, DAH = G32 (yellow wire) |
+| Sound | Built-in buzzer (GPIO11, PWM) | Built-in speaker (ES8311, I2S) | Built-in buzzer (G2, PWM) | Built-in buzzer (G2, PWM) |
+| Screen | 1.14" 240x135, touch | 1.14" 240x135, no touch | 1.14" 240x135, no touch | 1.14" 240x135, no touch |
+| Buttons | KEY1 (front), KEY2 (side) | BtnA (front), BtnB (side) | BtnA (front), BtnB (side) | BtnA (front), BtnB (side) |
+| Radio | ESP-NOW / LoRa (SX1262) / OFF | ESP-NOW / OFF | ESP-NOW / OFF | ESP-NOW / OFF |
+| Power management | AW32001 + BQ27220 | M5PM1 | None (power held by G4) | AXP192 |
+| USB serial | USB CDC | USB CDC | USB-UART (CH9102) | USB-UART (FTDI) |
 
-M5Stack Cardputer (初代) と Cardputer ADV は次のとおりです。**同じビルド**で動き、どちらかは起動時に自動で判別します
-(Cardputer v1.1 は未確認)。
+The M5Stack Cardputer (original) and Cardputer ADV are as follows. They run **the same build**, which detects which one it is at startup
+(Cardputer v1.1 has not been tested).
 
-| 項目 | Cardputer (初代) | Cardputer ADV |
+| Item | Cardputer (original) | Cardputer ADV |
 |---|---|---|
 | MCU | ESP32-S3 (StampS3) | ESP32-S3 (StampS3A) |
-| ストレートキー / パドル | Grove の G1 (白線) = ストレート / DIT、G2 (黄線) = DAH | 同じ |
-| 音 | 内蔵スピーカー (NS4168, I2S) | 内蔵スピーカー + **ヘッドフォン端子** (ES8311 + NS4150B) |
-| キーボード | 56 キー (GPIO のマトリクス) | 56 キー (TCA8418, I2C) |
-| 画面 | 1.14" 240×135、タッチなし | 同じ |
-| ボタン | G0 (BtnA) の 1 つ + キーボード | 同じ |
-| 無線 | ESP-NOW / OFF | 同じ |
-| 電源管理 | なし (USB 給電の代わりに、PC との USB シリアル接続を検出する) | 同じ |
+| Straight key / paddle | Grove G1 (white wire) = straight / DIT, G2 (yellow wire) = DAH | Same |
+| Sound | Built-in speaker (NS4168, I2S) | Built-in speaker + **headphone jack** (ES8311 + NS4150B) |
+| Keyboard | 56 keys (GPIO matrix) | 56 keys (TCA8418, I2C) |
+| Screen | 1.14" 240x135, no touch | Same |
+| Buttons | One button, G0 (BtnA), + keyboard | Same |
+| Radio | ESP-NOW / OFF | Same |
+| Power management | None (instead of USB power, it detects a USB serial connection to a PC) | Same |
 
-**Cardputer ADV のヘッドフォン:** ヘッドフォンを差すと、ハードウェアがスピーカーを止めます (差したことはソフトでは
-検出できません)。設定画面の **OUTPUT** (SPEAKER / PHONES) を差し替えに合わせて切り替えてください。PHONES ではヘッドフォン向けの
-小さい音量段階になり、VOLUME は出口ごとに別々に覚えます (既定: スピーカー 3、ヘッドフォン 2)。OUTPUT は ADV でだけ表示します。
+**Cardputer ADV headphones:** When headphones are plugged in, the hardware mutes the speaker (the software cannot
+detect that they are plugged in). Switch **OUTPUT** (SPEAKER / PHONES) on the settings screen to match. PHONES uses smaller
+volume steps suitable for headphones, and VOLUME is remembered separately for each output (defaults: speaker 3, headphones 2). OUTPUT is shown only on the ADV.
 
-キーは本体の Grove ポートにつなぎ、接点を GND に落とします (内部プルアップ、アクティブ Low)。パドルの DIT と DAH は設定画面で入れ替えられます。
-ピンは `board.h` に、パラメータは `config.h` にまとめてあります。
+Connect the key to the Grove port on the unit, with the contacts shorting to GND (internal pull-up, active low). The paddle's DIT and DAH can be swapped on the settings screen.
+Pins are collected in `board.h`, and parameters in `config.h`.
 
-## ビルドと書き込み
+## Building and uploading
 
-必要なものは `arduino-cli` (1.x) だけです。機種ごとのボードパッケージ・ライブラリとそのバージョン、ボードのオプションは
-`sketch.yaml` にプロファイルとして書いてあり、初回のビルドで arduino-cli が自動でダウンロードします。
+All you need is `arduino-cli` (1.x). The board packages and libraries for each model, their versions, and the board options are
+written as profiles in `sketch.yaml`, and arduino-cli downloads them automatically on the first build.
 
-| プロファイル | 機種 | ポートの例 |
+| Profile | Model | Example port |
 |---|---|---|
 | `nesson1` | Arduino Nesso N1 | /dev/cu.usbmodemXXXX |
 | `sticks3` | M5StickS3 | /dev/cu.usbmodemXXXX |
 | `stickcplus2` | M5StickC Plus2 | /dev/cu.usbserial-XXXX |
-| `stickcplus` | M5StickC Plus (書き込みは 115200bps) | /dev/cu.usbserial-XXXX |
-| `cardputer` | Cardputer (初代) / Cardputer ADV (同じビルド。8MB 用のパーティション) | /dev/cu.usbmodemXXXX |
+| `stickcplus` | M5StickC Plus (uploads at 115200 bps) | /dev/cu.usbserial-XXXX |
+| `cardputer` | Cardputer (original) / Cardputer ADV (same build, 8MB partition scheme) | /dev/cu.usbmodemXXXX |
 
-同じフォルダから複数の機種をビルドするので、**機種ごとに別のビルドディレクトリ** (`--build-path`) を指定します
-(同じにすると、別の機種向けのファイルを書き込もうとして失敗します)。
+Because multiple models are built from the same folder, specify **a separate build directory for each model** (`--build-path`)
+(if they share one, uploading fails because it tries to write files built for another model).
 
-起動画面に git のコミットハッシュを出すため、ビルドの前に `tools/update-git-version.sh` を実行します
-(`git_version.h` を作ります。実行しなかった場合や git の外では `unknown` と表示されます)。
-`git config core.hooksPath tools/githooks` を一度実行しておくと、コミット・チェックアウト・マージ・リベースのたびに
-git のフック (`tools/githooks/`) が自動で実行するので、手で実行する必要はなくなります (クローンごとに 1 回)。
+To show the git commit hash on the startup screen, run `tools/update-git-version.sh` before building
+(it creates `git_version.h`; if it has not been run, or outside git, `unknown` is shown).
+If you run `git config core.hooksPath tools/githooks` once, git hooks (`tools/githooks/`) run it automatically on every
+commit, checkout, merge, and rebase, so you no longer need to run it by hand (once per clone).
 
 ```sh
-# コミットハッシュを git_version.h に書く
+# Write the commit hash to git_version.h
 tools/update-git-version.sh
-# ビルドして書き込む (例: Cardputer)
+# Build and upload (example: Cardputer)
 arduino-cli compile --profile cardputer --build-path build/cardputer -u -p /dev/cu.usbmodemXXXX .
-# ビルドだけ
+# Build only
 arduino-cli compile --profile nesson1 --build-path build/nesson1 .
 ```
 
-キーの種類 (モード) などは各本体に設定として保存されます。
+The key type (mode) and other settings are saved on each unit.
 
-## 使い方
+## Usage
 
-### 起動画面
+### Startup screen
 
-電源を入れたとき・リセットしたときは、3 秒間スプラッシュスクリーンを表示します。中央に `MorseComm`、その下にビルド日時
-(`20261101123734` のような年月日時分秒) と git のコミットハッシュ (`0820299` など。コミットしていない変更を含むビルドは
-末尾に `+`) が出るので、どの本体にどのビルドが入っているかを確かめられます。
-ビルド日時は機種ごとにビルドした時刻なので、同じソースでも機種によって違います。ソースが同じかどうかはコミットハッシュで比べます。
-同じ情報はシリアルの起動メッセージ (`build=... commit=...`) と `show` にも出ます。
+When powered on or reset, a splash screen is shown for 3 seconds. `MorseComm` appears in the center, and below it the build date and time
+(year, month, day, hour, minute, second, such as `20261101123734`) and the git commit hash (such as `0820299`; a build that includes
+uncommitted changes has a trailing `+`), so you can check which build is on which unit.
+The build date and time is when the build was made for each model, so it differs between models even for the same source. Use the commit hash to tell whether the source is the same.
+The same information also appears in the serial startup message (`build=... commit=...`) and in `show`.
 
-### メイン画面
+### Main screen
 
 ```
-[CH3] x2 -45dBm L0% R0 W0       87%   ← チャンネル / 局数 / リンク状態 / 電池 (+ は充電中)
-RX 20 wpm                        [■]   ← 受信 (相手の推定速度, キー状態)
-CQ CQ DE JA1ABC K                       (緑: 受信テキスト 3 行)
-TX 18 wpm                        [■]   ← 送信 (自分の推定速度)
-TU 73                                   (黄: 送信テキスト 2 行)
+[CH3] x2 -45dBm L0% R0 W0       87%   <- channel / station count / link status / battery (+ = charging)
+RX 20 wpm                        [#]   <- receive (other station's estimated speed, key state)
+CQ CQ DE JA1ABC K                       (green: received text, 3 lines)
+TX 18 wpm                        [#]   <- send (your estimated speed)
+TU 73                                   (yellow: sent text, 2 lines)
 ```
 
-最上段の表示の意味:
-- `CH3`: 今のチャンネル (LoRa を使っているときは紫地で `LoRa3`。電波 OFF のときは灰色の `OFF` と `RADIO OFF`)
-- `x2`: 同じチャンネルで受信できている局の数 (2 局以上のときだけ表示)
-- `dBm`: 最後に受信した局の受信信号強度
-- `L`: 推定パケットロス率
-- `R`: 再同期の回数
-- `W`: ウォッチドッグが働いた回数
+Meaning of the top line:
+- `CH3`: the current channel (when using LoRa, `LoRa3` on a purple background; when the radio is OFF, a gray `OFF` and `RADIO OFF`)
+- `x2`: the number of stations being received on the same channel (shown only when there are 2 or more)
+- `dBm`: the received signal strength of the station heard most recently
+- `L`: estimated packet loss rate
+- `R`: number of resyncs
+- `W`: number of times the watchdog has fired
 
-受信できている局がいなくなると `LOST` を、そのチャンネルで一度も受信していなければ `NO SIGNAL` を表示します。
+When no stations are being received any more, `LOST` is shown; if nothing has ever been received on that channel, `NO SIGNAL` is shown.
 
-解読できなかった符号は**赤い `?`** で表示します (正しく受信した `?` は通常の色)。
-文字間を空けずに続けて送った略符号 `...-.-` は `[SK]` と表示します。略符号は `morse_table.h` の `prosignTable` に追加できます。
+Code that could not be decoded is shown as a **red `?`** (a correctly received `?` is shown in the normal color).
+The prosign `...-.-`, sent continuously without a character gap, is shown as `[SK]`. Prosigns can be added to `prosignTable` in `morse_table.h`.
 
-### ボタン
+### Buttons
 
-KEY1 は正面のボタン (StickS3 では BtnA)、KEY2 は側面のボタン (StickS3 では BtnB) です。
+KEY1 is the front button (BtnA on the StickS3), and KEY2 is the side button (BtnB on the StickS3).
 
-| 画面 | 操作 | 動作 |
+| Screen | Action | Result |
 |---|---|---|
-| メイン | KEY1 (正面) 短押し | チャンネルを 1 つ進める (8 の次は 1)。切り替えた番号を画面中央に大きく表示 |
-| メイン | KEY1 長押し | チャンネルを 1 つ戻す |
-| メイン | KEY2 (側面) 短押し | 設定画面へ |
-| メイン | KEY2 長押し | 表示テキストを消去 |
-| 設定 (Nesso) | KEY1 短押し / KEY2 短押し | 次の項目 / 前の項目 |
-| 設定 (Nesso) | 項目をタッチ | その項目を選択 |
-| 設定 (Nesso) | 右側の **▲** / **▼** をタッチ | 値を増やす / 減らす (押し続けると連続で変わる) |
-| 設定 (Nesso) | KEY1 か KEY2 の長押し | 設定画面を抜ける (保存) |
+| Main | KEY1 (front) short press | Advance the channel by 1 (after 8 comes 1). The new number is shown large in the center of the screen |
+| Main | KEY1 long press | Go back one channel |
+| Main | KEY2 (side) short press | Open the settings screen |
+| Main | KEY2 long press | Clear the displayed text |
+| Settings (Nesso) | KEY1 short press / KEY2 short press | Next item / previous item |
+| Settings (Nesso) | Touch an item | Select that item |
+| Settings (Nesso) | Touch the **up** / **down** triangle on the right | Increase / decrease the value (holding it changes the value continuously) |
+| Settings (Nesso) | Long press KEY1 or KEY2 | Leave the settings screen (saves) |
 
-M5StickS3 にはタッチパネルが無いので、設定画面は「選択」と「変更」の 2 つのモードで操作します。最上段にそのときのボタンの役割を表示します。
+The M5StickS3 has no touch panel, so its settings screen is operated in two modes, "select" and "change". The top line shows the current role of each button.
 
-| モード | BtnA (正面) | BtnB (側面) | 長押し |
+| Mode | BtnA (front) | BtnB (side) | Long press |
 |---|---|---|---|
-| 選択 | 次の項目 | その項目の変更を始める (項目が橙色になる) | 設定画面を抜ける (保存) |
-| 変更 | 値を増やす (+) | 値を減らす (−) | 選択モードに戻る |
+| Select | Next item | Start changing that item (the item turns orange) | Leave the settings screen (saves) |
+| Change | Increase the value (+) | Decrease the value (-) | Return to select mode |
 
-どちらの機種も、設定画面で 30 秒操作がなければ自動でメイン画面に戻ります。
+On both models, the settings screen automatically returns to the main screen after 30 seconds without any operation.
 
-設定項目は次のとおりです (画面の表示順)。周波数や音量を変えると、その音が短く鳴ります。
+The settings items are as follows (in on-screen order). Changing a frequency or the volume plays that sound briefly.
 
-| 項目 | 値 |
+| Item | Value |
 |---|---|
-| RADIO | ESP-NOW / LoRa (Nesso N1 のみ) / OFF (電波を出さない)。動作中と違う値にすると `*` が付き、設定画面を抜けると再起動して切り替わる |
+| RADIO | ESP-NOW / LoRa (Nesso N1 only) / OFF (no radio emission). A value different from the one in use is marked with `*`, and the unit restarts and switches when you leave the settings screen |
 | MODE | STRAIGHT / IAMBIC_A / IAMBIC_B |
-| PADDLE | NORMAL / SWAPPED (DIT と DAH の入れ替え) |
-| SPEED | 5〜50 WPM (キーヤーの速度) |
+| PADDLE | NORMAL / SWAPPED (swap DIT and DAH) |
+| SPEED | 5 to 50 WPM (keyer speed) |
 | SIDETONE | ON / OFF |
-| OUTPUT | SPEAKER / PHONES (Cardputer ADV のみ。ヘッドフォンを差したら PHONES に) |
-| VOLUME | 0〜5 (0 は消音。Cardputer ADV では OUTPUT ごとに別々) |
-| SIDE FREQ | サイドトーンの周波数 (300〜1500 Hz, 50 Hz 刻み) |
-| RX FREQ | 受信トーンの周波数 |
-| DEFAULTS | すべての設定を既定値に戻す。▲か▼ (StickS3 / Plus2 では変更モードの + か −) を 1 回押すと `PRESS AGAIN` になり、3 秒以内にもう 1 回押すと実行 (`RESTORED`)。押し続けでは実行しない |
+| OUTPUT | SPEAKER / PHONES (Cardputer ADV only. Set to PHONES when headphones are plugged in) |
+| VOLUME | 0 to 5 (0 is mute. On the Cardputer ADV, separate for each OUTPUT) |
+| SIDE FREQ | Sidetone frequency (300 to 1500 Hz, in 50 Hz steps) |
+| RX FREQ | Receive tone frequency |
+| DEFAULTS | Restore all settings to their defaults. Pressing the up or down triangle (+ or - in change mode on the StickS3 / Plus2) once shows `PRESS AGAIN`, and pressing again within 3 seconds executes it (`RESTORED`). Holding it down does not execute it |
 
-既定値: RADIO = ESP-NOW, チャンネル = 1, MODE = IAMBIC_B, PADDLE = NORMAL, SPEED = 20 WPM, SIDETONE = ON, VOLUME = 3, SIDE FREQ = 700 Hz, RX FREQ = 600 Hz (ジッタ遅延も既定値に戻る)。
-無線の種類が変わる場合は、設定画面を抜けたときに再起動して切り替わります。
+Defaults: RADIO = ESP-NOW, channel = 1, MODE = IAMBIC_B, PADDLE = NORMAL, SPEED = 20 WPM, SIDETONE = ON, VOLUME = 3, SIDE FREQ = 700 Hz, RX FREQ = 600 Hz (the jitter delay is also reset to its default).
+If the radio type changes, the unit restarts and switches when you leave the settings screen.
 
-項目は 9 つあり、画面に収まらない分はスクロールします。
+There are 9 items; those that do not fit on the screen are reached by scrolling.
 
-RADIO を OFF にすると Wi-Fi も LoRa も初期化しないので、電波を一切出しません (受信もしません)。
-キー操作・サイドトーン・送信テキストのデコード表示・オートスリープは通常どおり動きます。チャンネルは意味が無いので、KEY1 (チャンネル切り替え) は効きません。
+When RADIO is OFF, neither Wi-Fi nor LoRa is initialized, so no radio waves are emitted at all (and nothing is received).
+Keying, sidetone, decoding display of sent text, and auto sleep work as usual. Channels are meaningless, so KEY1 (channel switching) has no effect.
 
-### Cardputer のキーボード
+### Cardputer keyboard
 
-Cardputer では、キーボードで打った文字をそのまま送れます (設定の SPEED の速度で、打った順に 1 文字ずつ)。
+On the Cardputer, characters typed on the keyboard are sent directly (at the SPEED setting, one character at a time in the order typed).
 
-| 画面 | キー | 動作 |
+| Screen | Key | Result |
 |---|---|---|
-| メイン | 文字・数字・記号 | その文字を送る。まだ送っていない文字は TX の行に灰色で表示する |
-| メイン | del (BS) | まだ送っていない最後の文字を取り消す |
-| メイン | space / enter / tab | 語間 |
-| メイン | `[` `]` で囲む | 文字間を空けずに続けて送る (例: `[SK]`) |
-| メイン | fn + ← (`,`) / fn + → (`/`) | チャンネルを 1 つ戻す / 進める |
-| メイン | esc (fn + `` ` ``、または `` ` `` だけ) | 設定画面へ |
-| メイン | G0 ボタン 短押し / 長押し | 設定画面へ / 表示テキストを消去 |
-| 設定 | ↑ / ↓ (fn + `;` / `.`、設定画面では fn なしでもよい) | 前 / 次の項目 |
-| 設定 | ← / → (`,` / `/`) | 値を減らす / 増やす |
-| 設定 | enter (OK) | 値を進める (DEFAULTS は 2 回押すと実行) |
-| 設定 | esc、または G0 ボタン | 設定画面を抜ける (保存) |
+| Main | Letters, digits, symbols | Send that character. Characters not yet sent are shown in gray on the TX line |
+| Main | del (BS) | Cancel the last character not yet sent |
+| Main | space / enter / tab | Word gap |
+| Main | Enclose in `[` `]` | Send continuously without character gaps (e.g. `[SK]`) |
+| Main | fn + left (`,`) / fn + right (`/`) | Go back / advance one channel |
+| Main | esc (fn + `` ` ``, or just `` ` ``) | Open the settings screen |
+| Main | G0 button short press / long press | Open the settings screen / clear the displayed text |
+| Settings | up / down (fn + `;` / `.`; fn is optional on the settings screen) | Previous / next item |
+| Settings | left / right (`,` / `/`) | Decrease / increase the value |
+| Settings | enter (OK) | Advance the value (DEFAULTS executes when pressed twice) |
+| Settings | esc, or the G0 button | Leave the settings screen (saves) |
 
-文字を送っている間は、キー・パドルの操作を無視します。
+While characters are being sent, key and paddle operation is ignored.
 
-### オートスリープ (電池運用時)
+### Auto sleep (on battery)
 
-電池で動いているとき (USB 給電なし) は、次の3つがどれも 3 分間なければディープスリープに入り、画面も消えます。
+When running on battery (no USB power), the unit enters deep sleep and the screen turns off if none of the following three occur for 3 minutes.
 
-- キー操作
-- ボタン・タッチ操作
-- 相手局の符号の受信
+- Keying
+- Button or touch operation
+- Receiving code from another station
 
-スリープの 10 秒前から、最上段に `SLEEP in Ns` と予告を表示します。この間にキーやボタンを操作すれば、スリープは取り消されます。
+From 10 seconds before sleeping, a `SLEEP in Ns` warning is shown on the top line. Operating a key or button during this time cancels the sleep.
 
-**正面か側面のボタンを押すと復帰します。** 復帰は再起動になり、約 1 秒かかります。設定は保存されたまま残ります。
-スリープ中は受信できません (LoRa も止めます)。USB 給電中はスリープしません。
-ただし **M5StickC Plus2 は USB 給電を検出できないので、USB につないでいても 3 分でスリープします** (BtnA / BtnB で復帰)。
-Plus2 はスリープ中も電源保持ピン (G4) を HIGH に保つので、電源は切れません。
-**Cardputer は USB 給電を検出できないので、PC と USB シリアルで通信できているときだけ「USB 給電中」とみなします**
-(充電器だけにつないだときは 3 分でスリープします)。復帰は G0 ボタンです (キーボードでは復帰しません)。時間は `config.h` の `SLEEP_TIMEOUT_MS` で変えられます。
+**Press the front or side button to wake up.** Waking up is a restart and takes about 1 second. Settings remain saved.
+Nothing can be received during sleep (LoRa is also stopped). The unit does not sleep while on USB power.
+However, **the M5StickC Plus2 cannot detect USB power, so it sleeps after 3 minutes even when connected to USB** (wake with BtnA / BtnB).
+The Plus2 keeps the power hold pin (G4) HIGH during sleep, so the power does not turn off.
+**The Cardputer cannot detect USB power, so it treats itself as "on USB power" only while it is communicating with a PC over USB serial**
+(when connected only to a charger, it sleeps after 3 minutes). Wake it with the G0 button (the keyboard does not wake it). The time can be changed with `SLEEP_TIMEOUT_MS` in `config.h`.
 
-### シリアルコマンド (115200 bps)
+### Serial commands (115200 bps)
 
-シリアルへの出力は英語 (US-ASCII) だけで、改行は CR LF です。
+Serial output is in English (US-ASCII) only, with CR LF line endings.
 
-- `morse> ` というプロンプトを出し、打った文字をエコーバックします。バックスペースで 1 文字消し、Ctrl-C で打ちかけの行を捨てます。
-- ログや統計が入力の途中に割り込んだときは改行して表示し、出力が止んだらプロンプトと打ちかけの文字を出し直します。
-- `help` はコマンドを 1 行に 1 つずつ表示します。
+- A `morse> ` prompt is shown, and typed characters are echoed back. Backspace deletes one character, and Ctrl-C discards the line being typed.
+- When logs or statistics interrupt input, they are printed on a new line, and once the output stops, the prompt and the partially typed characters are printed again.
+- `help` lists one command per line.
 
-| コマンド | 内容 |
+| Command | Description |
 |---|---|
-| `ch N` | 通信チャンネル (1〜8) |
-| `radio espnow\|lora\|off` | 無線の種類 (LoRa は Nesso N1 のみ。off は電波を出さない)。保存して再起動する |
-| `mode straight\|iambic_a\|iambic_b` | キーモード |
-| `wpm N` | キーヤー速度 |
-| `side N` / `side on` / `side off` | サイドトーンの周波数 / ON・OFF |
-| `rxtone N` | 受信トーンの周波数 |
-| `vol 0-5` | 音量 (Cardputer ADV では今の出口の音量) |
-| `output speaker\|phones` | 音の出口 (Cardputer ADV のみ) |
-| `swap 0\|1` | パドルの入れ替え |
-| `jitter N` | ジッタバッファの遅延 (ms, 既定 ESP-NOW 150 / LoRa 250。無線の種類ごとに保存) |
-| `term` | 端末モード (下記)。Ctrl-C で抜ける |
-| `test on [TEXT]` / `test off` | テストモード: TEXT を現在の WPM で自動キーイングし続ける。`[SK]` のように角括弧で囲むと文字間を空けずに送る |
-| `loss N` | ロス注入: 送信を N% の確率で省略する |
-| `dropup 0\|1` | ロス注入: キーが UP の状態のパケットをすべて省略する |
-| `log 0\|1` | 遷移ログ (`TX`/`RX` 行) とデコード文字の出力、5 秒ごとの統計出力 |
-| `stats` / `show` | 統計 / 現在の設定 |
-| `clear` / `save` / `help` | 画面消去 / 設定の即時保存 / ヘルプ |
-| `defaults` | すべての設定を既定値に戻す (確認なしですぐ実行。無線の種類が変わる場合は再起動する) |
-| `sleep` | すぐにスリープする (動作確認用) |
+| `ch N` | Communication channel (1 to 8) |
+| `radio espnow\|lora\|off` | Radio type (LoRa is Nesso N1 only; off emits no radio waves). Saves and restarts |
+| `mode straight\|iambic_a\|iambic_b` | Key mode |
+| `wpm N` | Keyer speed |
+| `side N` / `side on` / `side off` | Sidetone frequency / on and off |
+| `rxtone N` | Receive tone frequency |
+| `vol 0-5` | Volume (on the Cardputer ADV, the volume of the current output) |
+| `output speaker\|phones` | Sound output (Cardputer ADV only) |
+| `swap 0\|1` | Swap the paddle |
+| `jitter N` | Jitter buffer delay (ms; default ESP-NOW 150 / LoRa 250. Saved separately for each radio type) |
+| `term` | Terminal mode (see below). Exit with Ctrl-C |
+| `test on [TEXT]` / `test off` | Test mode: keeps automatically keying TEXT at the current WPM. Enclosing in square brackets like `[SK]` sends without character gaps |
+| `loss N` | Loss injection: skip sending with probability N% |
+| `dropup 0\|1` | Loss injection: skip all packets whose key state is UP |
+| `log 0\|1` | Output of the transition log (`TX`/`RX` lines) and decoded characters, plus statistics every 5 seconds |
+| `stats` / `show` | Statistics / current settings |
+| `clear` / `save` / `help` | Clear the screen / save settings immediately / help |
+| `defaults` | Restore all settings to their defaults (runs immediately without confirmation; restarts if the radio type changes) |
+| `sleep` | Sleep immediately (for testing) |
 
-統計 (`STATS` 行) の `|` より後は送信側の値です。`csBusy` は LoRa のキャリアセンスで他局の電波を検出して待った回数、`air` は LoRa の送信時間の合計です。
+In the statistics (`STATS` line), the values after `|` are for the sending side. `csBusy` is the number of times LoRa carrier sense detected another station's signal and waited, and `air` is the total LoRa transmission time.
 
-### 端末モード (`term`)
+### Terminal mode (`term`)
 
-USB シリアルでつないだ PC のターミナルで `term` と打つと、端末モードになります。
+Typing `term` in a terminal on a PC connected via USB serial enters terminal mode.
 
-- 打った文字は、設定の速度 (SPEED, WPM) で 1 文字ずつモールス符号にして送ります (サイドトーンも鳴ります)。打った文字はすぐ表示されます。
-- 受信した文字は届いた順に表示します。打った文字の行は `> `、受信した文字の行は `< ` で始まります。
-- 小文字は大文字として送ります。空白と改行は語間になります。`[SK]` のように角括弧で囲むと、文字間を空けずに続けて送ります (略符号)。
-- バックスペースで、まだ送り始めていない文字を取り消せます。モールス符号の無い文字はベルを鳴らして無視します。
-- 文字を送っている間はキー・パドルの操作を無視します。送り終わればキー・パドルも普通に使えます。
-- **Ctrl-C** (または Ctrl-D) で抜けます。未送信の文字は捨てます。
-- RADIO が OFF のときは電波を出さないので、打った文字を聞き取る練習に使えます。
+- Typed characters are converted to Morse code and sent one character at a time at the configured speed (SPEED, WPM) (the sidetone also sounds). Typed characters are shown immediately.
+- Received characters are shown in the order they arrive. Lines of typed characters start with `> `, and lines of received characters start with `< `.
+- Lowercase letters are sent as uppercase. Spaces and newlines become word gaps. Enclosing in square brackets like `[SK]` sends continuously without character gaps (prosigns).
+- Backspace cancels characters that have not started being sent yet. Characters with no Morse code ring the bell and are ignored.
+- While characters are being sent, key and paddle operation is ignored. Once sending is finished, the key and paddle can be used normally.
+- Exit with **Ctrl-C** (or Ctrl-D). Unsent characters are discarded.
+- When RADIO is OFF, no radio waves are emitted, so it can be used to practice copying the characters you typed.
 
-例: macOS で `screen /dev/cu.usbmodemXXXX 115200` (screen は Ctrl-A, K で終了)。Arduino IDE のシリアルモニタでも使えます (1 行ずつ送られます)。
+Example: on macOS, `screen /dev/cu.usbmodemXXXX 115200` (exit screen with Ctrl-A, K). The Arduino IDE serial monitor also works (text is sent one line at a time).
 
-ログの `RX D t=... prevU=60` は「時刻 t に DOWN になった。直前の UP は 60 ms 続いた」という意味です。
-ウォッチドッグによる強制 UP には `WATCHDOG` が、その後の DOWN 再開には `REASSERT` が付きます。
+The log entry `RX D t=... prevU=60` means "went DOWN at time t; the preceding UP lasted 60 ms".
+A forced UP by the watchdog is marked `WATCHDOG`, and a subsequent resumption of DOWN is marked `REASSERT`.
 
-## 仕組み
+## How it works
 
-### パケット
+### Packets
 
-キーを「押した」「離した」というイベントを1回だけ送る方式では、離したパケットが落ちると受信側が押しっぱなしになります。
-そこで本方式は、**現在の状態と直近の遷移履歴を定期的に送り続けます**。
+With a scheme that sends each "pressed" or "released" event only once, losing the release packet leaves the receiver stuck in the key-down state.
+Instead, this scheme **keeps sending the current state and the recent transition history periodically**.
 
-- **送信間隔:** キー DOWN 中と、UP になってから 500 ms の間は 20 ms ごとに送ります。それ以外のアイドル時は 500 ms ごとのハートビートです。キー状態が変わった瞬間には即座に1回送ります。
-- **パケットの中身 (13 + 2n バイト):** magic, version, チャンネル, 現在の状態, パケット通番, 最新の遷移 ID, 送信時刻, 直近 8 回分の遷移の経過時間。
-- **受信側の処理:** まだ適用していない遷移 ID の遷移だけを、古い順に適用します。このため、重複や順序の入れ替わりがあっても正しく処理できます。8 回分の履歴を越えて取りこぼした場合は、現在の状態に合わせて再同期します。
+- **Send interval:** Packets are sent every 20 ms while the key is DOWN and for 500 ms after it goes UP. Otherwise, while idle, a heartbeat is sent every 500 ms. A packet is also sent immediately at the moment the key state changes.
+- **Packet contents (13 + 2n bytes):** magic, version, channel, current state, packet sequence number, latest transition ID, send time, and the elapsed times of the last 8 transitions.
+- **Receiver processing:** Only transitions whose transition IDs have not been applied yet are applied, oldest first. This handles duplicates and reordering correctly. If more transitions are missed than the 8-entry history covers, the receiver resyncs to the current state.
 
-### チャンネルと複数局
+### Channels and multiple stations
 
-- **チャンネル:** ESP-NOW はブロードキャストのまま、パケットにチャンネル番号を入れます。受信側は自分と同じチャンネルのパケットだけを受け取ります。Wi-Fi の物理チャンネルは全局で固定 (1) です。
-- **複数局:** 受信側は送信元の MAC アドレスごとに、以下の再生処理とデコーダを別々に持ちます (最大 6 局)。音は全局の OR で鳴らし、デコードした文字はどの局のものも受信テキストに出します。
-- **チャンネル切り替え:** 切り替えると、それまでの局の再生をすべて打ち切ります。
+- **Channels:** ESP-NOW stays in broadcast mode, and the channel number is put in the packet. The receiver accepts only packets on the same channel as its own. The physical Wi-Fi channel is fixed (1) for all stations.
+- **Multiple stations:** The receiver keeps separate playback processing (described below) and a separate decoder for each sender MAC address (up to 6 stations). Sound is the OR of all stations, and decoded characters from any station appear in the received text.
+- **Switching channels:** When the channel is switched, playback of all previous stations is stopped.
 
-### LoRa (Nesso N1 のみ)
+### LoRa (Nesso N1 only)
 
-Nesso N1 には LoRa 無線機 (Semtech SX1262) が載っています。設定画面の RADIO か `radio lora` で切り替えます。
-パケットの中身・受信側の処理は ESP-NOW と同じで、送り方だけが違います。
+The Nesso N1 has a LoRa radio (Semtech SX1262). Switch to it with RADIO on the settings screen or with `radio lora`.
+The packet contents and receiver processing are the same as for ESP-NOW; only the way packets are sent is different.
 
-- **電波の条件:** 日本の 920MHz 帯 特定小電力無線局 (20mW 以下, ARIB STD-T108) の、キャリアセンス 5ms 以上の区分に従います。
-  - 空中線電力 13 dBm (20 mW)。
-  - 送信前に 5 ms キャリアセンスし、-80 dBm 以上の電波があれば少し待ってやり直します。
-  - 1 回の送信 (約 7 ms) のあと 50 ms 以上休みます。この区分には 1 時間あたりの送信時間の総和の制限はありません。
-- **変調:** LoRa SF5 / 帯域 500 kHz (単位チャネル 3 つの結束) / CR 4/5。29 バイトのパケットの送信時間は約 6 ms です。
-- **チャンネルと周波数:** チャンネル n の中心周波数は `920.8 + 0.6 × (n − 1)` MHz です (CH1 = 920.8 MHz 〜 CH8 = 925.0 MHz)。パケットにも ESP-NOW と同じくチャンネル番号を入れます。
-- **送信間隔:** 休止の決まりがあるので、最短で約 60 ms ごとになります (ESP-NOW は 20 ms)。engine は ESP-NOW と同じように送るパケットを組み立てますが、LoRa のタスクは「送ってよい時」の最新の 1 つだけを送ります。送る直前に送信時刻と履歴の経過時間を付け替えるので、内容はその時点の状態と一致します。アイドル時のハートビートは 1 秒ごとです。
-- **送信元:** LoRa には送信元アドレスが無いので、パケットの前に送信元の MAC アドレス (6 バイト) を付けます。全局が同じ周波数でブロードキャストし合う対等な関係です。
-- **遅延:** ジッタ遅延の既定値は 250 ms です (ESP-NOW は 150 ms)。キーを叩いてから相手の音が鳴るまで約 0.26 秒かかります。`jitter` で変えられますが、短くするとパケットロス時に遅延超過 (デコード誤り) が増えます。
-- **受信信号強度:** 受信経路に LNA (約 21 dB) があるので、SX1262 の RSSI から 20 dB 引いてアンテナ端の値として表示します。机上で並べると飽和して約 -20 dBm と表示されます。
-- アンテナを付けずに送信しないでください (SX1262 が壊れることがあります)。
+- **Radio conditions:** Follows the category with carrier sense of 5 ms or more for Japan's 920 MHz band specified low-power radio stations (20 mW or less, ARIB STD-T108).
+  - Antenna power 13 dBm (20 mW).
+  - Carrier sense for 5 ms before transmitting; if a signal of -80 dBm or more is present, wait a little and retry.
+  - After each transmission (about 7 ms), pause for at least 50 ms. This category has no limit on the total transmission time per hour.
+- **Modulation:** LoRa SF5 / 500 kHz bandwidth (3 bonded unit channels) / CR 4/5. The airtime of a 29-byte packet is about 6 ms.
+- **Channels and frequencies:** The center frequency of channel n is `920.8 + 0.6 x (n - 1)` MHz (CH1 = 920.8 MHz to CH8 = 925.0 MHz). As with ESP-NOW, the channel number is also put in the packet.
+- **Send interval:** Because of the required pause, the minimum interval is about 60 ms (ESP-NOW: 20 ms). The engine builds packets to send the same way as for ESP-NOW, but the LoRa task sends only the latest one at the moment it is allowed to transmit. Just before sending, it re-stamps the send time and the elapsed times in the history, so the contents match the state at that moment. The idle heartbeat is every 1 second.
+- **Sender:** LoRa has no source address, so the sender's MAC address (6 bytes) is prepended to the packet. All stations broadcast to each other on the same frequency as equal peers.
+- **Latency:** The default jitter delay is 250 ms (ESP-NOW: 150 ms). It takes about 0.26 seconds from pressing the key until the other station's tone sounds. It can be changed with `jitter`, but shortening it increases late arrivals (decoding errors) when packets are lost.
+- **Received signal strength:** The receive path has an LNA (about 21 dB), so 20 dB is subtracted from the SX1262 RSSI and the result is shown as the value at the antenna. When units sit side by side on a desk, it saturates and shows about -20 dBm.
+- Do not transmit without an antenna attached (it can damage the SX1262).
 
-### 受信側の再生
+### Receiver playback
 
-- **時刻合わせ:** 送受信機の時計は同期していません。そこで、パケットごとに `受信時刻 − 送信時刻` を計算し、直近 4 秒間の最小値 (最もネットワーク遅延が小さかったもの) を時刻オフセットとして使います。
-- **ジッタバッファ:** 送信側時刻 T の遷移は、受信側の `T + オフセット + 150 ms` (LoRa は 250 ms) に再生します。こうすると到着時刻がばらついても、元の DOWN/UP の長さがそのまま再現されます。
-- **ウォッチドッグ:** 再生位置が「受け取った最新パケットの送信時刻 + 100 ms」を越えても DOWN のままなら、強制的に UP にします。その後、同じ遷移 ID のまま DOWN のパケットが届いた場合 (単なるパケットロスだった場合) は、DOWN を再開します。
-- **デコード:** 再生された時間軸の上で行います。dit 長を適応的に推定し、DOWN が dit の 2 倍以上なら長点と判定します。UP が dit の 2 倍以上なら文字間、5 倍以上なら語間と判定します。
+- **Time alignment:** The clocks of the sender and receiver are not synchronized. So for each packet, `receive time - send time` is computed, and the minimum over the last 4 seconds (the packet with the smallest network delay) is used as the time offset.
+- **Jitter buffer:** A transition at sender time T is played back at receiver time `T + offset + 150 ms` (250 ms for LoRa). This way, even if arrival times vary, the original DOWN/UP durations are reproduced exactly.
+- **Watchdog:** If the playback position passes "send time of the latest packet received + 100 ms" while still DOWN, the state is forced to UP. If a DOWN packet with the same transition ID then arrives (meaning it was just packet loss), DOWN is resumed.
+- **Decoding:** Performed on the played-back timeline. The dit length is estimated adaptively; a DOWN of 2 or more dits is judged a dah. An UP of 2 or more dits is judged a character gap, and 5 or more dits a word gap.
 
-### タスク構成
+### Task structure
 
-処理を2つのタスクに分けています (ESP32-C6 はシングルコアなので特に重要です)。
+Processing is split into two tasks (especially important because the ESP32-C6 is single-core).
 
-- **`engine.cpp`:** 1 ms 周期の高優先度タスクです。キー入力・キーヤー・送信・受信再生・トーン・デコードを担当します。
-- **`loop()`:** 画面描画、ボタン・タッチ・電池 (I2C を含む)、シリアルコマンド、設定の保存を担当します。
+- **`engine.cpp`:** A high-priority task with a 1 ms period. It handles key input, the keyer, sending, receive playback, tones, and decoding.
+- **`loop()`:** Handles screen drawing, buttons, touch, battery (including I2C), serial commands, and saving settings.
 
-画面の転送に十数 ms かかっても、キーイングのタイミングは乱れません。
-ESP-NOW の受信コールバックでは受信時刻を記録してキューに積むだけにし、処理は engine タスクで行います。
-LoRa は専用のタスク (`net_lora.cpp`) がキャリアセンス・送信・受信を行い、受信したパケットを同じキューに積みます。
-Nesso N1 では画面と LoRa が同じ SPI バスを使うので、画面の転送と LoRa の操作は排他 (`hw::lockBus`) しています。
+Even if a screen transfer takes over ten milliseconds, keying timing is not disturbed.
+The ESP-NOW receive callback only records the receive time and puts the packet in a queue; processing is done in the engine task.
+For LoRa, a dedicated task (`net_lora.cpp`) handles carrier sense, sending, and receiving, and puts received packets in the same queue.
+On the Nesso N1, the screen and LoRa share the same SPI bus, so screen transfers and LoRa operations are mutually exclusive (`hw::lockBus`).
 
-### ファイル
+### Files
 
-| ファイル | 内容 |
+| File | Contents |
 |---|---|
-| `MorseComm.ino` | setup/loop、ボタン・タッチ、シリアルコマンド、設定保存 |
-| `engine.h/.cpp` | 1 ms 周期のキーイングタスク |
-| `build_info.h/.cpp` | ビルド日時 (各ソースのコンパイル日時の最新) |
-| `config.h` | パラメータ (送信間隔、ジッタ遅延、ウォッチドッグなど。ボード共通) |
-| `board.h` | ボードの判別とキーのピン |
-| `protocol.h` | パケット形式、送信側の遷移履歴と送信スケジューラ |
-| `jitter.h` | 受信側の遷移復元、時刻オフセット推定、ジッタバッファ、ウォッチドッグ |
-| `keyer.h` | デバウンス、アイアンビックキーヤー (A/B)、テキスト自動キーイング、端末モードの送信待ちバッファと 1 文字ずつのキーヤー |
-| `morse_decoder.h` / `morse_table.h` | デコーダ / 符号表 |
-| `ui.*` | 画面描画とボタン・タッチ入力の解釈 (ボード共通) |
-| `hw.h`, `hw_nesso.cpp`, `hw_m5stick.cpp` | 画面・ボタン・タッチ・電池 (Nesso / M5Unified の 4 機種) |
-| `keyboard_cardputer.cpp` | Cardputer のキーボード (初代: キーマトリクスの走査 / ADV: TCA8418) |
-| `tone_out.h`, `tone_out_buzzer.cpp`, `tone_out_m5speaker.cpp` | ブザー (Nesso, Plus2, Plus) / スピーカー (StickS3, Cardputer) |
-| `power.h`, `power_nesso.cpp`, `power_sticks3.cpp`, `power_stickc.cpp` (Plus2 / Plus), `power_cardputer.cpp` | USB 給電の検出、ディープスリープ (ボードごと) |
-| `net.h`, `net.cpp`, `net_internal.h` | 無線の共通部 (受信キュー、統計、ロス注入、無線の種類の切り替え) |
-| `net_espnow.cpp` | ESP-NOW (ボード共通) |
-| `net_lora.cpp` | LoRa (Nesso N1 のみ。キャリアセンス・休止・送信時刻の付け替え) |
-| `peers.h` | 複数局の受信 (送信元ごとの再生・デコード) |
-| `test/host/` | Mac 上で動かすユニットテストと損失シミュレーション |
+| `MorseComm.ino` | setup/loop, buttons and touch, serial commands, saving settings |
+| `engine.h/.cpp` | Keying task with a 1 ms period |
+| `build_info.h/.cpp` | Build date and time (the latest compile time among all sources) |
+| `config.h` | Parameters (send intervals, jitter delay, watchdog, etc. Common to all boards) |
+| `board.h` | Board detection and key pins |
+| `protocol.h` | Packet format, sender-side transition history and send scheduler |
+| `jitter.h` | Receiver-side transition reconstruction, time offset estimation, jitter buffer, watchdog |
+| `keyer.h` | Debouncing, iambic keyer (A/B), automatic text keying, terminal mode send buffer and one-character-at-a-time keyer |
+| `morse_decoder.h` / `morse_table.h` | Decoder / code table |
+| `ui.*` | Screen drawing and interpretation of button and touch input (common to all boards) |
+| `hw.h`, `hw_nesso.cpp`, `hw_m5stick.cpp` | Screen, buttons, touch, battery (Nesso / the 4 M5Unified models) |
+| `keyboard_cardputer.cpp` | Cardputer keyboard (original: key matrix scanning / ADV: TCA8418) |
+| `tone_out.h`, `tone_out_buzzer.cpp`, `tone_out_m5speaker.cpp` | Buzzer (Nesso, Plus2, Plus) / speaker (StickS3, Cardputer) |
+| `power.h`, `power_nesso.cpp`, `power_sticks3.cpp`, `power_stickc.cpp` (Plus2 / Plus), `power_cardputer.cpp` | USB power detection, deep sleep (per board) |
+| `net.h`, `net.cpp`, `net_internal.h` | Common radio code (receive queue, statistics, loss injection, radio type switching) |
+| `net_espnow.cpp` | ESP-NOW (common to all boards) |
+| `net_lora.cpp` | LoRa (Nesso N1 only. Carrier sense, pause, re-stamping of send times) |
+| `peers.h` | Reception from multiple stations (per-sender playback and decoding) |
+| `test/host/` | Unit tests and loss simulation that run on a Mac |
 
-`protocol.h`、`jitter.h`、`keyer.h`、`morse_decoder.h` は Arduino の API を使いません。時刻は引数で受け取ります。
+`protocol.h`, `jitter.h`, `keyer.h`, and `morse_decoder.h` do not use the Arduino API. Time is passed in as an argument.
 
-## テスト
+## Testing
 
 ```sh
 make -C test/host test
 ```
 
-テストの対象は次のとおりです。
+The tests cover:
 
-- パケットのエンコード/デコード
-- 送信スケジュール
-- キーヤー (Mode A/B の違い、メモリ、速度)
-- デコーダ (各種の WPM と揺らぎ)
+- Packet encoding/decoding
+- Send scheduling
+- Keyer (differences between Mode A/B, memory, speed)
+- Decoder (various WPM values and timing variation)
 
-あわせて、60 秒のランダムなキーイングを次の条件で通信路に流すシミュレーションも行います。
+In addition, a simulation feeds 60 seconds of random keying through the channel under the following conditions.
 
-- ランダムロス 10/30/50%
-- バースト損失
-- UP のパケットだけを落とす
-- 0〜80 ms / 250 ms の遅延揺らぎ
-- 重複
-- クロックのずれと wrap
-- LoRa の送信条件 (最新の 1 パケットだけを約 60 ms ごとに送る、キャリアセンスの待ち) とロス
+- Random loss of 10/30/50%
+- Burst loss
+- Dropping only UP packets
+- Delay variation of 0 to 80 ms / 250 ms
+- Duplicates
+- Clock drift and wrap-around
+- LoRa send conditions (only the latest packet sent about every 60 ms, waiting on carrier sense) and loss
 
-どの条件でも押しっぱなしにならないこと、ロスが履歴数以内なら遷移列とタイミングが一致することを確かめています。
+The tests confirm that the key never gets stuck down under any condition, and that the transition sequence and timing match whenever the loss is within the history length.
 
-実機では、テストモード (`test on PARIS`) とロス注入 (`loss 50`, `dropup 1`) を使って同じことを確認できます。
+On real hardware, the same can be checked with test mode (`test on PARIS`) and loss injection (`loss 50`, `dropup 1`).
 
-## 既知の制限
+## Known limitations
 
-- UP の状態のパケットがすべて落ちる極端な条件では、文字の最後の要素がウォッチドッグの時間ぶん (約 +80 ms) 長く再生されます。押しっぱなしにはなりません。
-- 同じチャンネルで 2 局が同時に送信すると、本物の無線と同様に音が重なります。テキストは局ごとにデコードしますが、文字が交互に混ざって表示されます。
-- 1 つのチャンネルで同時に追跡できるのは 6 局までです。それを越えると、最も長く受信していない局を入れ替えます。
-- 自局と相手局が同時に DOWN のときは、サイドトーンの周波数で鳴らします。
-- LoRa では、パケットロスが 4 回以上続く (約 0.3 秒途絶える) と遅延超過になり、デコードを誤ることがあります。ESP-NOW より送信間隔が長いためです。
-- LoRa は半二重なので、自局の送信中 (約 6 ms) は受信できません。
-- ESP-NOW の局と LoRa の局は互いに通信できません。全員が同じ無線の種類・同じチャンネルに合わせる必要があります。
+- Under the extreme condition where all UP-state packets are lost, the last element of a character is played back longer by the watchdog time (about +80 ms). The key does not get stuck down.
+- If two stations transmit at the same time on the same channel, their tones overlap, just as with real radio. The text is decoded per station, but characters are shown interleaved.
+- Up to 6 stations can be tracked at once on one channel. Beyond that, the station not heard from for the longest time is replaced.
+- When your station and another station are DOWN at the same time, the sidetone frequency is played.
+- With LoRa, if packet loss continues 4 or more times in a row (an outage of about 0.3 seconds), late arrivals occur and decoding may be wrong. This is because the send interval is longer than with ESP-NOW.
+- LoRa is half-duplex, so nothing can be received while your own station is transmitting (about 6 ms).
+- ESP-NOW stations and LoRa stations cannot communicate with each other. Everyone must use the same radio type and the same channel.
+
+## License
+
+MIT License. See [LICENSE](LICENSE).

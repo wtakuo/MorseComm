@@ -1,14 +1,20 @@
-# MorseComm のビルドプロファイル (arduino-cli 1.x)
+# Build profiles for MorseComm (arduino-cli 1.x)
 # https://docs.arduino.cc/arduino-cli/sketch-project-file/
 #
-# 使い方 (機種ごとにビルドディレクトリを分けること。同じにすると別の機種向けのファイルを書き込もうとして失敗する):
-#   arduino-cli compile --profile nesson1   --build-path build/nesson1   -u -p /dev/cu.usbmodemXXXX .
-#   arduino-cli compile --profile cardputer --build-path build/cardputer -u -p /dev/cu.usbmodemXXXX .
-# 初回は、指定したバージョンのボードパッケージとライブラリを arduino-cli が自動でダウンロードする。
-# バージョンはこのプロジェクトで実機確認したときのもの。
+# Usage (use a separate build directory per board; sharing one makes it try to
+# upload files built for another board and fail):
+#   arduino-cli compile --profile nesson1 --build-path build/nesson1 \
+#       -u -p /dev/cu.usbmodemXXXX .
+#   arduino-cli compile --profile cardputer --build-path build/cardputer \
+#       -u -p /dev/cu.usbmodemXXXX .
+# On first use, arduino-cli automatically downloads the specified versions of
+# the board packages and libraries.
+# The versions are those used when this project was tested on hardware.
 profiles:
   nesson1:
-    notes: Arduino Nesso N1 (ESP32-C6, 240x135 touch, buzzer, ESP-NOW / LoRa SX1262). Keys on Grove GPIO4 (straight/DIT), GPIO5 (DAH)
+    notes: >-
+      Arduino Nesso N1 (ESP32-C6, 240x135 touch, buzzer, ESP-NOW / LoRa SX1262).
+      Keys on Grove GPIO4 (straight/DIT), GPIO5 (DAH)
     fqbn: esp32:esp32:arduino_nesso_n1
     platforms:
       - platform: esp32:esp32 (3.3.12)
@@ -20,7 +26,9 @@ profiles:
       - RadioLib (7.8.1)
 
   sticks3:
-    notes: M5StickS3 (ESP32-S3, 240x135, ES8311 speaker, M5PM1). Keys on Grove G10 (straight/DIT), G9 (DAH)
+    notes: >-
+      M5StickS3 (ESP32-S3, 240x135, ES8311 speaker, M5PM1). Keys on Grove G10
+      (straight/DIT), G9 (DAH)
     fqbn: m5stack:esp32:m5stack_sticks3
     platforms:
       - platform: m5stack:esp32 (3.3.10)
@@ -30,7 +38,9 @@ profiles:
       - M5GFX (0.2.36)
 
   stickcplus2:
-    notes: M5StickC Plus2 (ESP32, 240x135, buzzer G2, no PMIC, USB-UART CH9102). Keys on Grove G33 (straight/DIT), G32 (DAH)
+    notes: >-
+      M5StickC Plus2 (ESP32, 240x135, buzzer G2, no PMIC, USB-UART CH9102). Keys
+      on Grove G33 (straight/DIT), G32 (DAH)
     fqbn: m5stack:esp32:m5stack_stickc_plus2
     platforms:
       - platform: m5stack:esp32 (3.3.10)
@@ -40,7 +50,10 @@ profiles:
       - M5GFX (0.2.36)
 
   stickcplus:
-    notes: M5StickC Plus (ESP32, 240x135, buzzer G2, AXP192, USB-UART). Keys on Grove G33 (straight/DIT), G32 (DAH). Upload at 115200 baud since faster speeds fail on some units
+    notes: >-
+      M5StickC Plus (ESP32, 240x135, buzzer G2, AXP192, USB-UART). Keys on Grove
+      G33 (straight/DIT), G32 (DAH). Upload at 115200 baud since faster speeds
+      fail on some units
     fqbn: m5stack:esp32:m5stack_stickc_plus:UploadSpeed=115200
     platforms:
       - platform: m5stack:esp32 (3.3.10)
@@ -50,7 +63,10 @@ profiles:
       - M5GFX (0.2.36)
 
   cardputer:
-    notes: M5Stack Cardputer and Cardputer ADV (same build; detected at run time). 8MB flash, so set both FlashSize and PartitionScheme (FlashSize defaults to 4MB). Keys on Grove G1 (straight/DIT), G2 (DAH)
+    notes: >-
+      M5Stack Cardputer and Cardputer ADV (same build; detected at run time).
+      8MB flash, so set both FlashSize and PartitionScheme (FlashSize defaults
+      to 4MB). Keys on Grove G1 (straight/DIT), G2 (DAH)
     fqbn: m5stack:esp32:m5stack_cardputer:FlashSize=8M,PartitionScheme=default_8MB
     platforms:
       - platform: m5stack:esp32 (3.3.10)

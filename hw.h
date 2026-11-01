@@ -1,5 +1,6 @@
-// hw.h — 画面まわりのハードウェア抽象 (画面・ボタン・タッチ・電池)
-// 実装はボードごと: hw_nesso.cpp / hw_sticks3.cpp。I2C を使うので loop() 側からのみ呼ぶこと。
+// hw.h - Hardware abstraction around the display (screen, buttons, touch,
+// battery) Implemented per board: hw_nesso.cpp / hw_sticks3.cpp. Uses I2C, so
+// call only from the loop() side.
 #pragma once
 #include <stdint.h>
 #include <M5GFX.h>
@@ -7,42 +8,47 @@
 namespace hw {
 
 struct Battery {
-  bool valid = false;
-  int percent = 0;
-  bool charging = false;
+    bool valid = false;
+    int percent = 0;
+    bool charging = false;
 };
 
-// ボードの初期化 (画面を 240x135 横長にする)
+// Board initialization (sets the screen to 240x135 landscape)
 void begin();
 lgfx::LGFX_Device& display();
-// 物理ボタン: 0 = 正面 (Nesso: KEY1 / StickS3: BtnA), 1 = 側面 (Nesso: KEY2 / StickS3: BtnB)。押下中なら true
+// Physical buttons: 0 = front (Nesso: KEY1 / StickS3: BtnA), 1 = side (Nesso:
+// KEY2 / StickS3: BtnB). true while pressed
 bool button(int i);
 bool hasTouch();
-// タッチ中なら画面座標を返す
+// Returns screen coordinates while touched
 bool touch(int16_t& x, int16_t& y);
 Battery battery();
-// スリープ前に画面を消す
+// Turn off the screen before sleep
 void displaySleep();
-// 画面と共有している SPI バスの排他 (Nesso N1: 画面と LoRa が同じ SPI。別タスクから使うので必要)。
-// 画面に描く側も LoRa 側も、SPI を使う間はこれで囲む。StickS3 では何もしない
+// Mutual exclusion for the SPI bus shared with the screen (Nesso N1: screen and
+// LoRa use the same SPI; needed because they are used from different tasks).
+// Both the drawing side and the LoRa side wrap their SPI use with this. Does
+// nothing on StickS3
 void lockBus();
 void unlockBus();
 
-// キーボード (Cardputer)。押された瞬間のキーを 1 つずつ返す (無ければ KEY_NONE)。実装は keyboard_cardputer.cpp
+// Keyboard (Cardputer). Returns keys one at a time at the moment they are
+// pressed (KEY_NONE if none). Implemented in keyboard_cardputer.cpp
 enum : int {
-  KEY_NONE = -1,
-  KEY_ENTER = '\r',
-  KEY_BACKSPACE = 0x08,
-  KEY_TAB = '\t',
-  KEY_ESC = 0x1B,
-  KEY_UP = 0x100,  // fn + ;
-  KEY_DOWN,        // fn + .
-  KEY_LEFT,        // fn + ,
-  KEY_RIGHT,       // fn + /
+    KEY_NONE = -1,
+    KEY_ENTER = '\r',
+    KEY_BACKSPACE = 0x08,
+    KEY_TAB = '\t',
+    KEY_ESC = 0x1B,
+    KEY_UP = 0x100,  // fn + ;
+    KEY_DOWN,        // fn + .
+    KEY_LEFT,        // fn + ,
+    KEY_RIGHT,       // fn + /
 };
 bool hasKeyboard();
 int readKey();
-// ヘッドフォン端子がある (Cardputer ADV)。差すとハードウェアでスピーカーが止まるが、差したことは検出できない
+// Has a headphone jack (Cardputer ADV). Plugging in stops the speaker in
+// hardware, but the plug-in cannot be detected
 bool hasPhoneJack();
 
 }  // namespace hw

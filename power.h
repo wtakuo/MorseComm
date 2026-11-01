@@ -1,18 +1,19 @@
-// power.h — 給電状態の検出とディープスリープ (Nesso N1)
-// I2C (IO エキスパンダ) を使うので loop() 側からのみ呼ぶこと。
+// power.h - Power source detection and deep sleep (Nesso N1)
+// Uses I2C (IO expander), so call only from the loop() side.
 #pragma once
 #include <stdint.h>
 
 namespace power {
 
-// USB (VIN) から給電されているか
+// Whether powered from USB (VIN)
 bool usbPowered();
-// 復帰要因がボタンだったか (起動直後に呼ぶ)
+// Whether the wake-up cause was a button (call right after boot)
 bool wokeFromSleep();
-// 割り込み線 SYS_IRQ の状態など (診断用)
+// State of the SYS_IRQ interrupt line etc. (for diagnostics)
 void printStatus();
-// 画面を消し、ボタン (KEY1/KEY2) で復帰するディープスリープに入る。戻らない
-// (割り込み線が既に Low で入れなかった場合のみ false を返す)
+// Turn off the screen and enter deep sleep, woken by a button (KEY1/KEY2). Does
+// not return (returns false only if it could not enter because the interrupt
+// line was already Low)
 bool enterDeepSleep();
 
 }  // namespace power

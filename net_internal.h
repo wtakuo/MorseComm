@@ -1,25 +1,27 @@
-// net_internal.h — net.cpp と各無線の実装 (net_espnow.cpp / net_lora.cpp) の間だけで使う
+// net_internal.h - Used only between net.cpp and each radio implementation
+// (net_espnow.cpp / net_lora.cpp)
 #pragma once
 #include "net.h"
 
 namespace net {
 namespace detail {
 
-// 受信キューに積む (コールバック・タスクから。ISR からは呼ばない)
+// Push to the receive queue (from callbacks/tasks; not called from an ISR)
 void pushRx(const RxItem& item);
 
-// 統計の更新: updateStats([](Stats& s) { s.sent++; }); (排他は内部で取る)
+// Update stats: updateStats([](Stats& s) { s.sent++; }); (locking is done
+// internally)
 void lockStats();
 void unlockStats();
 Stats& statsRef();
 template <typename F>
 void updateStats(F f) {
-  lockStats();
-  f(statsRef());
-  unlockStats();
+    lockStats();
+    f(statsRef());
+    unlockStats();
 }
 
-// ロス注入: このパケットを落とすなら true (統計も数える)
+// Loss injection: true if this packet should be dropped (also counted in stats)
 bool injectDrop(const uint8_t* data, size_t len);
 
 }  // namespace detail
@@ -30,7 +32,7 @@ bool send(const uint8_t* data, size_t len);
 }  // namespace espnow
 
 namespace lora {
-bool available();  // このボードに LoRa がある
+bool available();  // This board has LoRa
 bool begin(uint8_t channel);
 bool send(const uint8_t* data, size_t len);
 void setChannel(uint8_t channel);

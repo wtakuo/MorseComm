@@ -1,5 +1,6 @@
-// hw_m5stick.cpp — M5StickS3 / M5StickC Plus2 / M5StickC Plus / Cardputer の画面・ボタン・電池
-// (M5Unified を使う。タッチなし。Cardputer のキーボードは keyboard_cardputer.cpp)
+// hw_m5stick.cpp - Screen, buttons, battery for M5StickS3 / M5StickC Plus2 /
+// M5StickC Plus / Cardputer (uses M5Unified; no touch; the Cardputer keyboard
+// is in keyboard_cardputer.cpp)
 #include "board.h"
 #include "build_info.h"
 BUILD_INFO_UNIT();
@@ -13,42 +14,50 @@ BUILD_INFO_UNIT();
 namespace hw {
 namespace {
 #if defined(BOARD_STICKS3)
-constexpr int PIN_BTN[2] = {11, 12};  // BtnA (正面), BtnB (側面)。押下 = LOW
+constexpr int PIN_BTN[2] = {11,
+                            12};  // BtnA (front), BtnB (side). Pressed = LOW
 #elif defined(BOARD_CARDPUTER)
-// ボタンは G0 (BtnA) の 1 つだけ。他機種の KEY2 (側面: 設定画面 / 長押しでテキスト消去) の役にする。
-// チャンネル切り替えなど KEY1 の役はキーボードで行う
+// Only one button, G0 (BtnA). It takes the role of KEY2 on other boards (side:
+// settings screen / long press clears text). KEY1's roles such as channel
+// switching are done with the keyboard
 constexpr int PIN_BTN[2] = {-1, 0};
 #else
-constexpr int PIN_BTN[2] = {37, 39};  // StickC Plus2 / Plus: BtnA (正面), BtnB (側面)。押下 = LOW (外部プルアップ)
+constexpr int PIN_BTN[2] = {37,
+                            39};  // StickC Plus2 / Plus: BtnA (front), BtnB
+                                  // (side). Pressed = LOW (external pull-up)
 #endif
 }  // namespace
 
 void begin() {
 #if defined(BOARD_STICKC_PLUS2)
-  // ディープスリープ中に保持していたピンを解放する (power_stickcplus2.cpp)。
-  // 電源保持 G4 は、解放した瞬間に電源が切れないよう先に HIGH を出力しておく
-  gpio_set_direction(GPIO_NUM_4, GPIO_MODE_OUTPUT);
-  gpio_set_level(GPIO_NUM_4, 1);
-  gpio_hold_dis(GPIO_NUM_4);
-  gpio_hold_dis(GPIO_NUM_27);  // バックライト
+    // Release pins held during deep sleep (power_stickcplus2.cpp).
+    // Drive the power hold pin G4 HIGH first so power is not cut the moment it
+    // is released
+    gpio_set_direction(GPIO_NUM_4, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_4, 1);
+    gpio_hold_dis(GPIO_NUM_4);
+    gpio_hold_dis(GPIO_NUM_27);  // Backlight
 #elif defined(BOARD_CARDPUTER)
-  gpio_hold_dis(GPIO_NUM_38);  // スリープ中に LOW で保持したバックライト (power_cardputer.cpp)
+    gpio_hold_dis(
+        GPIO_NUM_38);  // Backlight held LOW during sleep (power_cardputer.cpp)
 #endif
-  auto cfg = M5.config();
-  cfg.serial_baudrate = 0;  // Serial は setup() で初期化済み
-  cfg.clear_display = true;
+    auto cfg = M5.config();
+    cfg.serial_baudrate = 0;  // Serial is already initialized in setup()
+    cfg.clear_display = true;
 #if defined(BOARD_STICKS3) || defined(BOARD_CARDPUTER)
-  cfg.internal_spk = true;   // StickS3: ES8311 / Cardputer: NS4168 のスピーカー (tone_out_m5speaker.cpp)
+    cfg.internal_spk = true;  // StickS3: ES8311 / Cardputer: NS4168 speaker
+                              // (tone_out_m5speaker.cpp)
 #else
-  cfg.internal_spk = false;  // StickC Plus2 / Plus のブザー (G2) は tone_out_buzzer.cpp が LEDC で直接鳴らす
+    cfg.internal_spk = false;  // The StickC Plus2 / Plus buzzer (G2) is driven
+                               // directly via LEDC by tone_out_buzzer.cpp
 #endif
-  cfg.internal_mic = false;
-  // Grove はキー入力に使うので、外部 I2C 機器を探しに行かせない
-  cfg.external_imu = false;
-  cfg.external_rtc = false;
-  cfg.external_display.module_display = false;
-  M5.begin(cfg);
-  M5.Display.setRotation(1);
+    cfg.internal_mic = false;
+    // Grove is used for key input, so do not probe for external I2C devices
+    cfg.external_imu = false;
+    cfg.external_rtc = false;
+    cfg.external_display.module_display = false;
+    M5.begin(cfg);
+    M5.Display.setRotation(1);
 }
 
 lgfx::LGFX_Device& display() { return M5.Display; }
@@ -60,28 +69,33 @@ bool hasTouch() { return false; }
 bool touch(int16_t&, int16_t&) { return false; }
 
 Battery battery() {
-  Battery b;
-  int pct = M5.Power.getBatteryLevel();
-  if (pct >= 0 && pct <= 100) {
-    b.valid = true;
-    b.percent = pct;
-    // StickC Plus2 は充電状態を検出できない (charge_unknown) ので常に false
-    b.charging = M5.Power.isCharging() == m5::Power_Class::is_charging;
-  }
-  return b;
+    Battery b;
+    int pct = M5.Power.getBatteryLevel();
+    if (pct >= 0 && pct <= 100) {
+        b.valid = true;
+        b.percent = pct;
+        // StickC Plus2 cannot detect the charging state (charge_unknown), so
+        // always false
+        b.charging = M5.Power.isCharging() == m5::Power_Class::is_charging;
+    }
+    return b;
 }
 
 void displaySleep() {
-  M5.Display.fillScreen(TFT_BLACK);
-  M5.Display.setBrightness(0);
-  M5.Display.sleep();
+    M5.Display.fillScreen(TFT_BLACK);
+    M5.Display.setBrightness(0);
+    M5.Display.sleep();
 }
 
 bool hasPhoneJack() {
 #if defined(BOARD_CARDPUTER)
-  return M5.getBoard() == m5::board_t::board_M5CardputerADV;  // 初代と ADV は同じビルドで、M5Unified が起動時に判別する
+    return M5.getBoard() ==
+           m5::board_t::board_M5CardputerADV;  // The original and ADV share the
+                                               // same build; M5Unified
+                                               // identifies the board at
+                                               // startup
 #else
-  return false;
+    return false;
 #endif
 }
 

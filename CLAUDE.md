@@ -72,7 +72,11 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   (ボードごとの .cpp は全体を `#if defined(BOARD_xxx)` で囲む。Arduino はフォルダ内の全 .cpp をビルドするため)
   peers.h               # 複数局の受信: 送信元 MAC ごとの Receiver + デコーダ、全局 OR (Arduino非依存)
   tools/ser.sh          # シリアルへのコマンド送信と出力取得
-  README.md             # 使い方・シリアルコマンド・仕組み (ユーザー向け)
+  README.md / README.ja.md   # 使い方・シリアルコマンド・仕組み (英語 / 日本語)
+  LICENSE               # MIT
+  .clang-format         # コード整形の設定 (4 スペース, 80 桁)
+  sketch.yaml           # ビルドプロファイル
+  build_info.h/.cpp     # ビルド日時とコミットハッシュ
 test/
   host/                 # Mac上で g++ でビルドするユニットテスト・損失シミュレーション
 ```
@@ -398,7 +402,16 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - ISR/コールバック内 (ESP-NOW の受信コールバックなど) では重い処理をせず、キューに積んで `loop()` で処理する
 - 共有データは競合に注意する (コールバックと `loop()` の間は、キューまたはクリティカルセクションを使う)
 - 破壊的操作 (大規模な削除・書き換え) の前にはユーザーに確認する
-- コードコメントと README は日本語で良い
+- **(2026-11-01 公開準備でユーザー指示)** プログラム・スクリプト・設定ファイルのコメントと文字列は**英語**で書き、
+  **US-ASCII 以外の文字を使わない** (→ は ->、▲ は up triangle など)。インデントは **4 スペース** (タブ禁止)、
+  **80 カラム以内** (できる限り)。整形は `.clang-format` (Google ベース, IndentWidth 4, ColumnLimit 80,
+  SortIncludes Never) で: `clang-format -i *.cpp *.h test/host/*.cpp` と
+  `clang-format --assume-filename=MorseComm.cpp < MorseComm.ino > tmp && mv tmp MorseComm.ino`。
+  マクロや #include の行末コメントは clang-format が `\` で折り返して崩すので、コメントは前の行に書く。
+  例外: sketch.yaml の URL と Cardputer の fqbn は分割できないので 80 桁を超える。test/host/Makefile はタブを
+  使わないよう `target: deps ; command` の形で書いてある (macOS の GNU Make 3.81 は .RECIPEPREFIX が無い)
+- README は **README.md = 英語、README.ja.md = 日本語**。内容を変えたら両方を直すこと。CLAUDE.md は日本語のまま
+- ライセンスは MIT (LICENSE, Copyright (c) 2026 Takuo Watanabe)
 
 ## 13. 作業状況と再開メモ (2026-11-01 時点)
 
@@ -431,6 +444,9 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     この設定は自動モードの安全チェックで「永続的な設定」として Claude からは拒否されるので、ユーザーが実行する。
     このクローンではユーザーが設定済み (2026-11-01)。コミットのたびに git_version.h が自動で更新される
     StickS3 でスプラッシュのコミットハッシュ表示をユーザーが確認済み
+17. (2026-11-01) 公開準備: コメント・文字列を英語 (US-ASCII のみ) に、4 スペース・80 桁に整形 (clang-format)、
+    README を英語 (README.md) と日本語 (README.ja.md) に、LICENSE (MIT) を追加。コードの中身は変えていない
+    (コメントを除いたトークン列を整形前と比較して確認。違いは長い文字列の分割と board.h の #error の文言だけ)
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み

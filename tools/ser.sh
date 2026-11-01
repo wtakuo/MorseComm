@@ -1,10 +1,13 @@
 #!/bin/zsh
-# usage: ser.sh PORT SECONDS [command...]  — コマンドを送り、SECONDS 秒間出力を取る
+# usage: ser.sh PORT SECONDS [command...]  - send commands and capture
+# output for SECONDS seconds
 port=$1; secs=$2; shift 2
-# 開いたままの fd に対して設定する (USB-UART は閉じると設定が既定 9600bps に戻るため)
+# Configure the fd that stays open (USB-UART reverts to the default 9600bps
+# when closed)
 exec 3<>$port
 stty 115200 raw -echo clocal <&3
-# USB-UART (StickC Plus2 の CH9102, /dev/cu.usbserial-*) はポートを開くと本体が再起動するので、起動を待ってから送る
+# USB-UART (StickC Plus2's CH9102, /dev/cu.usbserial-*) reboots the device
+# when the port is opened, so wait for it to boot before sending
 if [[ $port == *usbserial* ]]; then boot=4; else boot=0.3; fi
 ( timeout $(( secs + boot )) cat <&3 ) &
 sleep $boot

@@ -1,4 +1,5 @@
 #!/bin/sh
-# post-rewrite: コミットハッシュを git_version.h に反映する (tools/update-git-version.sh)
-# 有効にするには: git config core.hooksPath tools/githooks
+# post-rewrite: reflect the commit hash in git_version.h
+# (tools/update-git-version.sh)
+# To enable: git config core.hooksPath tools/githooks
 exec "$(git rev-parse --show-toplevel)/tools/update-git-version.sh"

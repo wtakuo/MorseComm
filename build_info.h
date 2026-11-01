@@ -1,23 +1,28 @@
-// build_info.h — ビルド日時 (スプラッシュスクリーンと show に出す)
+// build_info.h - Build date/time (shown on the splash screen and by show)
 //
-// arduino-cli は変わっていないソースを再コンパイルしないので、1 つのファイルの __DATE__ / __TIME__ では
-// 他のファイルだけを直したときに古い日時のままになる。そこで、各ソース (.cpp / .ino) に BUILD_INFO_UNIT() を書いて
-// それぞれのコンパイル日時を起動時に登録し、その最新をビルド日時とする (変更したファイルは必ずコンパイルし直される)。
-// ソースファイルを追加したら BUILD_INFO_UNIT() も書くこと。
+// arduino-cli does not recompile unchanged sources, so __DATE__ / __TIME__ in a
+// single file would stay stale when only other files are modified. Instead,
+// each source (.cpp / .ino) has BUILD_INFO_UNIT(), which registers its compile
+// date/time at startup, and the latest one is used as the build date/time
+// (modified files are always recompiled). When adding a source file, also add
+// BUILD_INFO_UNIT().
 #pragma once
 
 namespace buildinfo {
 
-void note(const char* date, const char* time);  // __DATE__ ("Nov  1 2026"), __TIME__ ("12:34:22")
-const char* stamp();                             // 最新のコンパイル日時 "20261101123422"
-// git のコミットハッシュ (7 桁。未コミットの変更があれば末尾に "+")。ビルド前に tools/update-git-version.sh が
-// git_version.h に書く。git_version.h が無ければ "unknown"
+void note(const char* date,
+          const char* time);  // __DATE__ ("Nov  1 2026"), __TIME__ ("12:34:22")
+const char* stamp();          // Latest compile date/time "20261101123422"
+// git commit hash (7 digits, with a trailing "+" if there are uncommitted
+// changes). Written to git_version.h by tools/update-git-version.sh before the
+// build. "unknown" if git_version.h does not exist
 const char* commit();
 
 struct Unit {
-  Unit(const char* date, const char* time) { note(date, time); }
+    Unit(const char* date, const char* time) { note(date, time); }
 };
 
 }  // namespace buildinfo
 
-#define BUILD_INFO_UNIT() static buildinfo::Unit buildInfoUnit_(__DATE__, __TIME__)
+#define BUILD_INFO_UNIT() \
+    static buildinfo::Unit buildInfoUnit_(__DATE__, __TIME__)
