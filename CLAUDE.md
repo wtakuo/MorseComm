@@ -306,12 +306,14 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - ボタン BtnA = G37, BtnB = G39、ブザー G2、Grove G32 (黄) / G33 (白) は Plus2 と同じ。キーも Plus2 と同じ
     G33 = ストレート/DIT, G32 = DAH (ユーザー確認済み)
   - スリープ: Plus2 と同じく BtnA を EXT0、BtnB を EXT1 ALL_LOW で起こす。電源保持ピンは無い (AXP192 が保つ)。
-    バックライトは hw::displaySleep の setBrightness(0) で AXP192 側が消える (想定。電池でのスリープは未確認)
+    バックライトは hw::displaySleep の setBrightness(0) で AXP192 側が消える (電池でのスリープ・消灯・復帰をユーザーが確認済み)
   - power_stickcplus2.cpp を power_stickc.cpp に改名して Plus2 と共用 (#if で違う所だけ分ける)。
     **ファイルを改名したら、そのボードのビルドディレクトリに古い .o が残るので `--clean` でビルドし直すこと**
   - USB シリアルは FTDI 系 (/dev/cu.usbserial-*)。ポートを開くと再起動する点は Plus2 と同じ
   - 実機: Plus ⇔ Plus の ESP-NOW で PARIS 20WPM を再現 (60/180/420ms)、デコード誤りなし、ロス 0.3%。
     MAC [Plus-A] (/dev/cu.usbserial-XXXX), [Plus-B] (/dev/cu.usbserial-XXXX)
+  - ユーザー確認済み (2026-11-01): 画面の向き・表示、サイドトーン・受信トーン、ボタン (チャンネル・設定画面・DEFAULTS)、
+    電池でのスリープ (画面消灯) とボタンでの復帰、Grove へのキー・パドル接続
 - LoRa (Nesso N1, 2026-10-30 調査・実機確認):
   - SX1262。SPI は画面と共有 (SCK=20, MOSI=21, MISO=22)。CS=GPIO23 (`LORA_CS`), BUSY=GPIO19, DIO1=GPIO15 (`LORA_IRQ`),
     NRST は無し (RADIOLIB_NC)。**画面 (loop) と LoRa タスクが同じ SPI を使うので `hw::lockBus()` で排他している**
@@ -374,7 +376,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
-- M5StickC Plus (旧モデル, AXP192) へ移植済み (2026-11-01, 2 台。§10)。画面・音・ボタン・スリープはユーザー未確認
+- M5StickC Plus (旧モデル, AXP192) へ移植済み (2026-11-01, 2 台。§10)。全項目をユーザーが確認済み
+- 4 機種 (Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus) すべてユーザーが実機で動作確認済み
 
 ### 次にやること (ユーザー予定)
 - LoRa を距離のある場所で試験する (ユーザーが後日実施)。結果 (最上段の dBm / L / R / W、デコードの具合) を聞いて、
