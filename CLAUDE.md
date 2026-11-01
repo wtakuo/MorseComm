@@ -428,6 +428,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     git_version.h (git に入れない、.gitignore) を作る。無ければ "unknown"。内容が変わったときだけ書き換える。
     git のフック (post-commit 等で自動生成) は、自動モードの安全チェックで「永続的な設定」として拒否されたので入れていない。
     使うかどうかはユーザーの判断 (使うなら tools/githooks を作って `git config core.hooksPath tools/githooks`)
+    StickS3 でスプラッシュのコミットハッシュ表示をユーザーが確認済み
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
