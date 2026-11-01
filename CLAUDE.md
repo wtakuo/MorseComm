@@ -426,8 +426,9 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 16. (2026-11-01) スプラッシュと show に git のコミットハッシュ (7 桁、未コミットの変更があれば末尾 "+") を追加。
     arduino-cli にはビルド時にコマンドを走らせる仕組みが無いので、**ビルドの前に `tools/update-git-version.sh` を実行**して
     git_version.h (git に入れない、.gitignore) を作る。無ければ "unknown"。内容が変わったときだけ書き換える。
-    git のフック (post-commit 等で自動生成) は、自動モードの安全チェックで「永続的な設定」として拒否されたので入れていない。
-    使うかどうかはユーザーの判断 (使うなら tools/githooks を作って `git config core.hooksPath tools/githooks`)
+    git のフック: tools/githooks/ (post-commit / post-checkout / post-merge / post-rewrite) がこのスクリプトを呼ぶ
+    (ユーザー依頼で作成)。有効にするには `git config core.hooksPath tools/githooks` (クローンごとに 1 回)。
+    この設定は自動モードの安全チェックで「永続的な設定」として Claude からは拒否されるので、ユーザーが実行する
     StickS3 でスプラッシュのコミットハッシュ表示をユーザーが確認済み
 
 ### 現在の状態 (2026-11-01)

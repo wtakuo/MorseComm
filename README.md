@@ -67,6 +67,8 @@ M5Stack Cardputer (初代) と Cardputer ADV は次のとおりです。**同じ
 
 起動画面に git のコミットハッシュを出すため、ビルドの前に `tools/update-git-version.sh` を実行します
 (`git_version.h` を作ります。実行しなかった場合や git の外では `unknown` と表示されます)。
+`git config core.hooksPath tools/githooks` を一度実行しておくと、コミット・チェックアウト・マージ・リベースのたびに
+git のフック (`tools/githooks/`) が自動で実行するので、手で実行する必要はなくなります (クローンごとに 1 回)。
 
 ```sh
 # コミットハッシュを git_version.h に書く
