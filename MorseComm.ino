@@ -47,6 +47,10 @@ ui::Battery battery;
 bool saveDirty = false;
 ui::DefaultsState defaultsState = ui::DefaultsState::Idle;  // 設定画面の DEFAULTS 項目
 uint32_t defaultsArmedMs = 0;
+
+// DEFAULTS の確認待ちが時間切れか。loop() の now は押した時刻より前のことがあるので符号付きで比べる
+// (符号無しだと now - defaultsArmedMs が巨大な値になり、押した直後に取り消されてしまう)
+bool defaultsExpired(uint32_t now) { return (int32_t)(now - defaultsArmedMs) >= (int32_t)cfg::DEFAULTS_CONFIRM_MS; }
 uint32_t lastChangeMs = 0, lastUiMs = 0, lastBtnMs = 0, lastStatsMs = 0, lastBatteryMs = 0;
 uint32_t chOverlayUntil = 0;  // この時刻までチャンネル番号を大きく表示する
 uint32_t lastInputMs = 0;  // ボタン・タッチ・シリアル入力、USB 給電中
@@ -542,7 +546,7 @@ void adjustSelected(int dir) {
   if (selected == ui::Item::Defaults) {
     // 1 回目で確認待ち、DEFAULTS_CONFIRM_MS 以内の 2 回目で実行
     uint32_t now = millis();
-    if (defaultsState == ui::DefaultsState::Armed && now - defaultsArmedMs < cfg::DEFAULTS_CONFIRM_MS) {
+    if (defaultsState == ui::DefaultsState::Armed && !defaultsExpired(now)) {
       restoreDefaults();
       defaultsState = ui::DefaultsState::Done;
     } else {
@@ -742,17 +746,19 @@ void loop() {
     int sleepIn = (remain >= 0 && remain <= (int32_t)cfg::SLEEP_WARN_MS) ? (remain + 999) / 1000 : -1;
     // DEFAULTS の確認待ちは、別の項目に移るか時間切れで取り消す
     if (selected != ui::Item::Defaults || !settingsScreen ||
-        (defaultsState == ui::DefaultsState::Armed && now - defaultsArmedMs >= cfg::DEFAULTS_CONFIRM_MS))
+        (defaultsState == ui::DefaultsState::Armed && defaultsExpired(now)))
       defaultsState = ui::DefaultsState::Idle;
     if (settingsScreen) ui::drawSettings(s, selected, editing, battery, defaultsState);
     else ui::drawMain(s, c, sn, battery, sleepIn, (int32_t)(now - chOverlayUntil) < 0);
   }
-  if (saveDirty && !settingsScreen && now - lastChangeMs >= SAVE_DELAY_MS) saveSettings();
+  // lastChangeMs はこの loop() の途中 (now より後) に更新されることがあるので符号付きで比べる
+  if (saveDirty && !settingsScreen && (int32_t)(now - lastChangeMs) >= (int32_t)SAVE_DELAY_MS) saveSettings();
   if (g_logOn && now - lastStatsMs >= STATS_INTERVAL_MS) {
     lastStatsMs = now;
     printStats();
   }
   // ログなどの出力が静まったらプロンプトを出し直す
-  if (!termMode && !promptShown && now - lastAsyncMs >= PROMPT_QUIET_MS) showPrompt();
+  // (lastAsyncMs はこの loop() の途中で更新されることがあるので millis() で比べる)
+  if (!termMode && !promptShown && millis() - lastAsyncMs >= PROMPT_QUIET_MS) showPrompt();
   delay(2);
 }
