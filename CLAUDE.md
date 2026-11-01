@@ -318,7 +318,11 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     電池でのスリープ (画面消灯) とボタンでの復帰、Grove へのキー・パドル接続
 - M5Stack Cardputer (初代, 2026-11-01 調査・実機確認, 1 台):
   - FQBN: `m5stack:esp32:m5stack_cardputer` (build/cardputer)。ESP32-S3 (StampS3, 8MB)。USB は USB CDC (HWCDC)。
-    既定のパーティションはアプリ 1.3MB で、現状 87% 使用 (足りなくなったらパーティションを変える)
+    **パーティション (2026-11-01 ユーザー依頼で変更):** FQBN に `:FlashSize=8M,PartitionScheme=default_8MB` を付ける
+    (アプリ 3.2MB x 2 の OTA 構成、現状 34% 使用)。初代・ADV とも実チップは 8MB (esptool の "Embedded Flash 8MB")。
+    **注意:** ボード定義の FlashSize メニューの既定は 4MB なので、PartitionScheme だけ 8MB にするとブートローダの
+    ヘッダが 4MB のままになり "partition ... exceeds flash chip size 0x400000" で起動しない (実際に起きた。必ず両方付ける)。
+    nvs (0x9000) と otadata (0xE000) の位置は既定と同じなので、変更しても保存した設定は残る (実機で確認)
   - キー: Grove の G1 (白) = ストレート/DIT, G2 (黄) = DAH (ユーザー指定)
   - キーボード (keyboard_cardputer.cpp, 自前で走査。M5Cardputer ライブラリは使っていない): 74HC138 の A0/A1/A2 =
     G8/G9/G11 で 8 本の行を選び、7 本の列 G13/G15/G3/G4/G5/G6/G7 (INPUT_PULLUP, 押下 LOW) を読む。
@@ -506,7 +510,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - M5StickS3: `arduino-cli compile -b m5stack:esp32:m5stack_sticks3 --build-path build/sticks3 -u -p PORT .`
   - M5StickC Plus2: `arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus2 --build-path build/stickcplus2 -u -p PORT .`
   - M5StickC Plus: `arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus:UploadSpeed=115200 --build-path build/stickcplus -u -p PORT .`
-  - Cardputer: `arduino-cli compile -b m5stack:esp32:m5stack_cardputer --build-path build/cardputer -u -p PORT .`
+  - Cardputer / ADV: `arduino-cli compile -b m5stack:esp32:m5stack_cardputer:FlashSize=8M,PartitionScheme=default_8MB --build-path build/cardputer -u -p PORT .`
     (ポートは /dev/cu.usbserial-*。Nesso / StickS3 は /dev/cu.usbmodem*)
   - 接続されている機器はセッションによって変わるので、`show` の出力 (power: 行の形式や mode) で判別する
 - シリアル操作: `tools/ser.sh PORT 秒数 "cmd1" "cmd2"` でコマンド送信と出力の取得ができる

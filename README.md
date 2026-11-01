@@ -65,8 +65,8 @@ arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-path build/nesso -u 
 arduino-cli compile -b m5stack:esp32:m5stack_sticks3 --build-path build/sticks3 -u -p /dev/cu.usbmodemXXXX .
 # M5StickC Plus2
 arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus2 --build-path build/stickcplus2 -u -p /dev/cu.usbserial-XXXX .
-# Cardputer (初代) / Cardputer ADV (同じ FQBN・同じビルド)
-arduino-cli compile -b m5stack:esp32:m5stack_cardputer --build-path build/cardputer -u -p /dev/cu.usbmodemXXXX .
+# Cardputer (初代) / Cardputer ADV (同じ FQBN・同じビルド。フラッシュ 8MB 用のパーティションを指定する)
+arduino-cli compile -b m5stack:esp32:m5stack_cardputer:FlashSize=8M,PartitionScheme=default_8MB --build-path build/cardputer -u -p /dev/cu.usbmodemXXXX .
 # M5StickC Plus (高速の書き込みで失敗する個体があるので、そのときは UploadSpeed=115200 を付ける)
 arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus:UploadSpeed=115200 --build-path build/stickcplus -u -p /dev/cu.usbserial-XXXX .
 ```
