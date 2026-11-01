@@ -167,14 +167,14 @@ void itemValue(const Settings& s, Item it, char* buf, size_t n) {
   }
 }
 
-void drawTouchButton(int y, const char* sym) {
+// 値を増やす / 減らすタッチボタン。▲ / ▼ を図形で描く (フォントに記号が無いため)
+void drawTouchButton(int y, bool up) {
+  constexpr int TRI_W = 36, TRI_H = 26;
   canvas.fillRoundRect(BTN_X, y, BTN_W, BTN_H, 8, COL_BTN);
-  canvas.setFont(&fonts::Font4);
-  canvas.setTextSize(2);
-  canvas.setTextColor(TFT_WHITE, COL_BTN);
-  canvas.setTextDatum(textdatum_t::middle_center);
-  canvas.drawString(sym, BTN_X + BTN_W / 2, y + BTN_H / 2);
-  canvas.setTextDatum(textdatum_t::top_left);
+  int cx = BTN_X + BTN_W / 2, cy = y + BTN_H / 2;
+  int top = cy - TRI_H / 2, bottom = cy + TRI_H / 2;
+  if (up) canvas.fillTriangle(cx, top, cx - TRI_W / 2, bottom, cx + TRI_W / 2, bottom, TFT_WHITE);
+  else canvas.fillTriangle(cx, bottom, cx - TRI_W / 2, top, cx + TRI_W / 2, top, TFT_WHITE);
 }
 
 void present() {
@@ -401,8 +401,8 @@ void drawSettings(const Settings& s, Item selected, bool editing, const Battery&
     canvas.setTextDatum(textdatum_t::top_left);
   }
   if (touch) {
-    drawTouchButton(BTN_PLUS_Y, "+");
-    drawTouchButton(BTN_MINUS_Y, "-");
+    drawTouchButton(BTN_PLUS_Y, true);    // 増やす
+    drawTouchButton(BTN_MINUS_Y, false);  // 減らす
   }
   present();
 }
