@@ -5,7 +5,7 @@ port=$1; secs=$2; shift 2
 exec 3<>$port
 stty 115200 raw -echo clocal <&3
 # USB-UART (StickC Plus2 の CH9102, /dev/cu.usbserial-*) はポートを開くと本体が再起動するので、起動を待ってから送る
-if [[ $port == *usbserial* ]]; then boot=2.5; else boot=0.3; fi
+if [[ $port == *usbserial* ]]; then boot=4; else boot=0.3; fi
 ( timeout $(( secs + boot )) cat <&3 ) &
 sleep $boot
 for c in "$@"; do print -r -- "$c" >&3; sleep 0.2; done
