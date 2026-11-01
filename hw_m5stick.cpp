@@ -1,4 +1,4 @@
-// hw_m5stick.cpp — M5StickS3 / M5StickC Plus2 の画面・ボタン・電池 (M5Unified を使う。タッチなし)
+// hw_m5stick.cpp — M5StickS3 / M5StickC Plus2 / M5StickC Plus の画面・ボタン・電池 (M5Unified を使う。タッチなし)
 #include "board.h"
 #if defined(BOARD_M5UNIFIED)
 #include "hw.h"
@@ -12,7 +12,7 @@ namespace {
 #if defined(BOARD_STICKS3)
 constexpr int PIN_BTN[2] = {11, 12};  // BtnA (正面), BtnB (側面)。押下 = LOW
 #else
-constexpr int PIN_BTN[2] = {37, 39};  // StickC Plus2: BtnA (正面), BtnB (側面)。押下 = LOW (外部プルアップ)
+constexpr int PIN_BTN[2] = {37, 39};  // StickC Plus2 / Plus: BtnA (正面), BtnB (側面)。押下 = LOW (外部プルアップ)
 #endif
 }  // namespace
 
@@ -31,7 +31,7 @@ void begin() {
 #if defined(BOARD_STICKS3)
   cfg.internal_spk = true;   // ES8311 のスピーカー (tone_out_sticks3.cpp)
 #else
-  cfg.internal_spk = false;  // StickC Plus2 のブザー (G2) は tone_out_buzzer.cpp が LEDC で直接鳴らす
+  cfg.internal_spk = false;  // StickC Plus2 / Plus のブザー (G2) は tone_out_buzzer.cpp が LEDC で直接鳴らす
 #endif
   cfg.internal_mic = false;
   // Grove はキー入力に使うので、外部 I2C 機器を探しに行かせない

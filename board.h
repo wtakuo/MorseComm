@@ -3,6 +3,7 @@
 //   Arduino Nesso N1 : esp32:esp32:arduino_nesso_n1        → ARDUINO_ARDUINO_NESSO_N1
 //   M5StickS3        : m5stack:esp32:m5stack_sticks3       → ARDUINO_M5STACK_STICKS3
 //   M5StickC Plus2   : m5stack:esp32:m5stack_stickc_plus2  → ARDUINO_M5STACK_STICKC_PLUS2
+//   M5StickC Plus    : m5stack:esp32:m5stack_stickc_plus   → ARDUINO_M5STACK_STICKC_PLUS
 #pragma once
 
 #if defined(ARDUINO_ARDUINO_NESSO_N1)
@@ -13,8 +14,11 @@
 #elif defined(ARDUINO_M5STACK_STICKC_PLUS2)
 #define BOARD_STICKC_PLUS2 1
 #define BOARD_M5UNIFIED 1
+#elif defined(ARDUINO_M5STACK_STICKC_PLUS)
+#define BOARD_STICKC_PLUS 1
+#define BOARD_M5UNIFIED 1
 #else
-#error "Unsupported board (Arduino Nesso N1 / M5StickS3 / M5StickC Plus2)"
+#error "Unsupported board (Arduino Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus)"
 #endif
 
 namespace board {
@@ -34,6 +38,12 @@ constexpr int PIN_PADDLE_DAH = 9;
 #elif defined(BOARD_STICKC_PLUS2)
 constexpr const char* NAME = "M5StickC Plus2";
 // Grove ポート: G33 (白, ボード定義の SCL) = ストレート / DIT, G32 (黄, SDA) = DAH (ユーザー確認済み)
+constexpr int PIN_STRAIGHT = 33;
+constexpr int PIN_PADDLE_DIT = 33;
+constexpr int PIN_PADDLE_DAH = 32;
+#elif defined(BOARD_STICKC_PLUS)
+constexpr const char* NAME = "M5StickC Plus";
+// Grove ポート: Plus2 と同じ (G33 = ストレート / DIT, G32 = DAH。ユーザー確認済み)
 constexpr int PIN_STRAIGHT = 33;
 constexpr int PIN_PADDLE_DIT = 33;
 constexpr int PIN_PADDLE_DAH = 32;

@@ -1,6 +1,6 @@
 # MorseComm — ESP-NOW / LoRa による CW キーイング伝送
 
-Arduino Nesso N1 (ESP32-C6)、M5StickS3 (ESP32-S3)、M5StickC Plus2 (ESP32) の間で、ESP-NOW (Wi-Fi ルータ不要) を使ってモールス符号のキーイングを双方向に伝送します。
+Arduino Nesso N1 (ESP32-C6)、M5StickS3 (ESP32-S3)、M5StickC Plus2 / M5StickC Plus (ESP32) の間で、ESP-NOW (Wi-Fi ルータ不要) を使ってモールス符号のキーイングを双方向に伝送します。
 Nesso N1 どうしなら、ESP-NOW の代わりに **LoRa (920MHz 帯)** でも通信できます ([LoRa](#lora-nesso-n1-のみ))。どちらも親機・子機の区別のない対等な通信です。
 電波を出さない **OFF** にすると、1 台だけでモールス送信の練習に使えます (サイドトーンと送信テキストのデコードは動きます)。
 PC のターミナルから文字を打って送り、受信した文字をターミナルに表示する**端末モード**もあります ([端末モード](#端末モード-term))。
@@ -14,18 +14,19 @@ PC のターミナルから文字を打って送り、受信した文字をタ�
 
 ## ハードウェア
 
-対応ボードは次の 3 機種です。機種が混在していても通信できます。
+対応ボードは次の 4 機種です。機種が混在していても通信できます。
 
-| 項目 | Arduino Nesso N1 | M5StickS3 | M5StickC Plus2 |
-|---|---|---|---|
-| MCU | ESP32-C6 | ESP32-S3 | ESP32 (PICO-V3-02) |
-| ストレートキー | GPIO4 (Grove の 4 番ピン) | GPIO10 (Grove の 4 番ピン) | G33 (Grove の白線) |
-| パドル | DIT = GPIO4, DAH = GPIO5 | DIT = GPIO10, DAH = GPIO9 | DIT = G33, DAH = G32 (黄線) |
-| 音 | 内蔵ブザー (GPIO11, PWM) | 内蔵スピーカー (ES8311, I2S) | 内蔵ブザー (G2, PWM) |
-| 画面 | 1.14" 240×135、タッチ対応 | 1.14" 240×135、タッチなし | 1.14" 240×135、タッチなし |
-| ボタン | KEY1 (正面), KEY2 (側面) | BtnA (正面), BtnB (側面) | BtnA (正面), BtnB (側面) |
-| 無線 | ESP-NOW / LoRa (SX1262) / OFF | ESP-NOW / OFF | ESP-NOW / OFF |
-| USB シリアル | USB CDC | USB CDC | USB-UART (CH9102) |
+| 項目 | Arduino Nesso N1 | M5StickS3 | M5StickC Plus2 | M5StickC Plus |
+|---|---|---|---|---|
+| MCU | ESP32-C6 | ESP32-S3 | ESP32 (PICO-V3-02) | ESP32 (PICO-D4) |
+| ストレートキー | GPIO4 (Grove の 4 番ピン) | GPIO10 (Grove の 4 番ピン) | G33 (Grove の白線) | G33 (Grove の白線) |
+| パドル | DIT = GPIO4, DAH = GPIO5 | DIT = GPIO10, DAH = GPIO9 | DIT = G33, DAH = G32 (黄線) | DIT = G33, DAH = G32 (黄線) |
+| 音 | 内蔵ブザー (GPIO11, PWM) | 内蔵スピーカー (ES8311, I2S) | 内蔵ブザー (G2, PWM) | 内蔵ブザー (G2, PWM) |
+| 画面 | 1.14" 240×135、タッチ対応 | 1.14" 240×135、タッチなし | 1.14" 240×135、タッチなし | 1.14" 240×135、タッチなし |
+| ボタン | KEY1 (正面), KEY2 (側面) | BtnA (正面), BtnB (側面) | BtnA (正面), BtnB (側面) | BtnA (正面), BtnB (側面) |
+| 無線 | ESP-NOW / LoRa (SX1262) / OFF | ESP-NOW / OFF | ESP-NOW / OFF | ESP-NOW / OFF |
+| 電源管理 | AW32001 + BQ27220 | M5PM1 | なし (G4 で電源保持) | AXP192 |
+| USB シリアル | USB CDC | USB CDC | USB-UART (CH9102) | USB-UART (FTDI) |
 
 キーは本体の Grove ポートにつなぎ、接点を GND に落とします (内部プルアップ、アクティブ Low)。パドルの DIT と DAH は設定画面で入れ替えられます。
 ピンは `board.h` に、パラメータは `config.h` にまとめてあります。
@@ -35,7 +36,7 @@ PC のターミナルから文字を打って送り、受信した文字をタ�
 必要なもの:
 - `arduino-cli`
 - Nesso N1: ESP32 コア `esp32:esp32` 3.3.x、ライブラリ `Arduino_Nesso_N1` (M5GFX に依存)、`RadioLib` (7.x, LoRa 用)
-- M5StickS3 / M5StickC Plus2: M5Stack のボードパッケージ `m5stack:esp32` 3.3.x、ライブラリ `M5Unified` (M5GFX に依存)
+- M5StickS3 / M5StickC Plus2 / M5StickC Plus: M5Stack のボードパッケージ `m5stack:esp32` 3.3.x、ライブラリ `M5Unified` (M5GFX に依存)
 
 同じフォルダから複数の機種をビルドするので、**ボードごとに別のビルドディレクトリ**を指定します (同じにすると、別の機種向けのファイルを書き込もうとして失敗します)。
 
@@ -46,6 +47,8 @@ arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-path build/nesso -u 
 arduino-cli compile -b m5stack:esp32:m5stack_sticks3 --build-path build/sticks3 -u -p /dev/cu.usbmodemXXXX .
 # M5StickC Plus2
 arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus2 --build-path build/stickcplus2 -u -p /dev/cu.usbserial-XXXX .
+# M5StickC Plus (高速の書き込みで失敗する個体があるので、そのときは UploadSpeed=115200 を付ける)
+arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus:UploadSpeed=115200 --build-path build/stickcplus -u -p /dev/cu.usbserial-XXXX .
 ```
 
 キーの種類 (モード) などは各本体に設定として保存されます。
@@ -250,9 +253,9 @@ Nesso N1 では画面と LoRa が同じ SPI バスを使うので、画面の転
 | `keyer.h` | デバウンス、アイアンビックキーヤー (A/B)、テキスト自動キーイング、端末モードの送信待ちバッファと 1 文字ずつのキーヤー |
 | `morse_decoder.h` / `morse_table.h` | デコーダ / 符号表 |
 | `ui.*` | 画面描画とボタン・タッチ入力の解釈 (ボード共通) |
-| `hw.h`, `hw_nesso.cpp`, `hw_m5stick.cpp` | 画面・ボタン・タッチ・電池 (Nesso / M5Unified の 2 機種) |
-| `tone_out.h`, `tone_out_buzzer.cpp`, `tone_out_sticks3.cpp` | ブザー (Nesso, Plus2) / スピーカー (StickS3) |
-| `power.h`, `power_nesso.cpp`, `power_sticks3.cpp`, `power_stickcplus2.cpp` | USB 給電の検出、ディープスリープ (ボードごと) |
+| `hw.h`, `hw_nesso.cpp`, `hw_m5stick.cpp` | 画面・ボタン・タッチ・電池 (Nesso / M5Unified の 3 機種) |
+| `tone_out.h`, `tone_out_buzzer.cpp`, `tone_out_sticks3.cpp` | ブザー (Nesso, Plus2, Plus) / スピーカー (StickS3) |
+| `power.h`, `power_nesso.cpp`, `power_sticks3.cpp`, `power_stickc.cpp` (Plus2 / Plus) | USB 給電の検出、ディープスリープ (ボードごと) |
 | `net.h`, `net.cpp`, `net_internal.h` | 無線の共通部 (受信キュー、統計、ロス注入、無線の種類の切り替え) |
 | `net_espnow.cpp` | ESP-NOW (ボード共通) |
 | `net_lora.cpp` | LoRa (Nesso N1 のみ。キャリアセンス・休止・送信時刻の付け替え) |

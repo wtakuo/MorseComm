@@ -4,7 +4,7 @@
 
 ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不要) を使って
 モールス符号のキーイング (A1A 相当: キーを押している間だけ「出る」) を双方向に伝送する。
-(当初の計画。その後 M5StickS3 / M5StickC Plus2 対応・LoRa・電波 OFF モード・端末モードを追加。現状は §13)
+(当初の計画。その後 M5StickS3 / M5StickC Plus2 / M5StickC Plus 対応・LoRa・電波 OFF モード・端末モードを追加。現状は §13)
 
 - 受信側は相手のキー状態に合わせてトーンを鳴らす
 - 送信側も自分用のモニタ(サイドトーン)を鳴らす
@@ -16,7 +16,7 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   キー・サイドトーン・送信デコード・スリープは通常どおり。メイン画面は灰色の "OFF" / "RADIO OFF"、KEY1 (チャンネル) は無効。
   設定画面の RADIO は Nesso: ESP-NOW → LoRa → OFF、StickS3 / StickC Plus2: ESP-NOW ↔ OFF
 - 端末モード (`term`): PC のターミナルで打った文字をモールスで送り、受信文字を表示する (2026-10-31 追加)
-- 対応ボード: Arduino Nesso N1 / M5StickS3 / M5StickC Plus2 (機種が混在しても ESP-NOW で通信できる)
+- 対応ボード: Arduino Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus (機種が混在しても ESP-NOW で通信できる)
 
 最大の設計課題は「キーを離したパケットが落ちると押しっぱなしになる」問題。
 **イベント(押す/離す)ではなく、状態+遷移履歴を定期送信し、受信側でウォッチドッグを持つ**
@@ -54,19 +54,19 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   engine.h/.cpp         # 1ms 周期のキーイングタスク (キー入力〜送信、受信再生、トーン、デコード)
   shared.h              # タスク間の共有データ
   morse_table.h         # 符号表
-  board.h               # ボード判別 (ARDUINO_ARDUINO_NESSO_N1 / ARDUINO_M5STACK_STICKS3 / ARDUINO_M5STACK_STICKC_PLUS2) とキーのピン
+  board.h               # ボード判別 (ARDUINO_ARDUINO_NESSO_N1 / ARDUINO_M5STACK_STICKS3 / _STICKC_PLUS2 / _STICKC_PLUS) とキーのピン
   config.h              # 既定パラメータ (ボード共通、Arduino非依存)
   protocol.h            # パケット構造体、エンコード/デコード (Arduino非依存)
   keyer.h               # ストレートキー処理、イアンビックキーヤー (Arduino非依存の状態機械)
   jitter.h              # 受信側ジッタバッファ・再生スケジューラ (Arduino非依存)
   morse_decoder.h       # タイミングからの文字デコード (Arduino非依存)
-  tone_out.h + tone_out_buzzer.cpp (Nesso, Plus2: LEDC) / tone_out_sticks3.cpp   # トーン出力
+  tone_out.h + tone_out_buzzer.cpp (Nesso, Plus2, Plus: LEDC) / tone_out_sticks3.cpp   # トーン出力
   net.h / net.cpp / net_internal.h   # 無線の共通部 (受信キュー・統計・ロス注入・無線の種類の振り分け)
   net_espnow.cpp        # ESP-NOW 送受信 (ボード共通)
   net_lora.cpp          # LoRa 送受信 (Nesso N1 のみ。専用タスク、キャリアセンス・休止、送信時刻の付け替え)
   ui.h/.cpp             # 画面 (メイン/設定) の描画とボタン・タッチ入力の解釈 (ボード共通)
-  hw.h + hw_nesso.cpp / hw_m5stick.cpp (StickS3, Plus2: M5Unified)   # 画面デバイス・ボタン・タッチ・電池
-  power.h + power_nesso.cpp / power_sticks3.cpp / power_stickcplus2.cpp  # USB 給電検出・ディープスリープ (ボードごと)
+  hw.h + hw_nesso.cpp / hw_m5stick.cpp (StickS3, Plus2, Plus: M5Unified)   # 画面デバイス・ボタン・タッチ・電池
+  power.h + power_nesso.cpp / power_sticks3.cpp / power_stickc.cpp (Plus2, Plus)  # USB 給電検出・ディープスリープ
   (ボードごとの .cpp は全体を `#if defined(BOARD_xxx)` で囲む。Arduino はフォルダ内の全 .cpp をビルドするため)
   peers.h               # 複数局の受信: 送信元 MAC ごとの Receiver + デコーダ、全局 OR (Arduino非依存)
   tools/ser.sh          # シリアルへのコマンド送信と出力取得
@@ -297,6 +297,21 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - 実機: Plus2 ⇔ StickS3 の ESP-NOW 双方向で PARIS 20WPM / CQ TEST 30WPM の DOWN/UP 長を再現 (±1ms)、デコード誤りなし
   - ユーザー確認済み (2026-10-31): 画面の向き・表示、サイドトーン・受信トーン、ボタンの役割 (他機種と同じ)、
     電池で 3 分後のスリープとボタンでの復帰。Grove へのキー・パドル接続 (G33/G32) も 2026-11-01 にユーザーが確認済み
+- M5StickC Plus (2026-11-01 調査・実機確認, 2 台):
+  - FQBN: `m5stack:esp32:m5stack_stickc_plus` (ビルドディレクトリ build/stickcplus)。ESP32-PICO-D4。電池 120mAh
+  - **書き込み速度:** 既定 1500000bps で "The chip stopped responding" になる個体があった ([Plus-B])。750000 でも失敗、
+    `:UploadSpeed=115200` で成功 (約 70 秒)。もう 1 台 ([Plus-A]) は既定の速度で書けた
+  - PMIC AXP192 (電源・バックライトを管理。M5Unified が扱う)。USB は AXP192 の VBUS に入り、`M5.Power.getVBUSVoltage()` で
+    約 5100mV → USB 給電の検出は StickS3 と同じく > 4000mV で判定 (実機で確認)。充電中は isCharging = 1
+  - ボタン BtnA = G37, BtnB = G39、ブザー G2、Grove G32 (黄) / G33 (白) は Plus2 と同じ。キーも Plus2 と同じ
+    G33 = ストレート/DIT, G32 = DAH (ユーザー確認済み)
+  - スリープ: Plus2 と同じく BtnA を EXT0、BtnB を EXT1 ALL_LOW で起こす。電源保持ピンは無い (AXP192 が保つ)。
+    バックライトは hw::displaySleep の setBrightness(0) で AXP192 側が消える (想定。電池でのスリープは未確認)
+  - power_stickcplus2.cpp を power_stickc.cpp に改名して Plus2 と共用 (#if で違う所だけ分ける)。
+    **ファイルを改名したら、そのボードのビルドディレクトリに古い .o が残るので `--clean` でビルドし直すこと**
+  - USB シリアルは FTDI 系 (/dev/cu.usbserial-*)。ポートを開くと再起動する点は Plus2 と同じ
+  - 実機: Plus ⇔ Plus の ESP-NOW で PARIS 20WPM を再現 (60/180/420ms)、デコード誤りなし、ロス 0.3%。
+    MAC [Plus-A] (/dev/cu.usbserial-XXXX), [Plus-B] (/dev/cu.usbserial-XXXX)
 - LoRa (Nesso N1, 2026-10-30 調査・実機確認):
   - SX1262。SPI は画面と共有 (SCK=20, MOSI=21, MISO=22)。CS=GPIO23 (`LORA_CS`), BUSY=GPIO19, DIO1=GPIO15 (`LORA_IRQ`),
     NRST は無し (RADIOLIB_NC)。**画面 (loop) と LoRa タスクが同じ SPI を使うので `hw::lockBus()` で排他している**
@@ -355,10 +370,11 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
    2026-11-01 にキー・パドル接続を含めてユーザーが全項目を確認済み
 9. (2026-11-01) 設定画面の順番変更、シリアルの CR LF・プロンプト・エコーバック・help の 1 行 1 コマンド化
 10. (2026-11-01) 設定を既定値に戻す DEFAULTS 項目と `defaults` コマンド、help の term の説明を短縮 (80 桁以内)
+11. (2026-11-01) M5StickC Plus 対応 (power_stickcplus2.cpp → power_stickc.cpp に共通化)
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
-- 次の作業: M5StickC Plus (Plus2 ではない旧モデル, AXP192 あり) への移植 (2026-11-01 ユーザー依頼, 2 台)
+- M5StickC Plus (旧モデル, AXP192) へ移植済み (2026-11-01, 2 台。§10)。画面・音・ボタン・スリープはユーザー未確認
 
 ### 次にやること (ユーザー予定)
 - LoRa を距離のある場所で試験する (ユーザーが後日実施)。結果 (最上段の dBm / L / R / W、デコードの具合) を聞いて、
@@ -446,6 +462,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - Nesso N1: `arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-path build/nesso -u -p PORT .`
   - M5StickS3: `arduino-cli compile -b m5stack:esp32:m5stack_sticks3 --build-path build/sticks3 -u -p PORT .`
   - M5StickC Plus2: `arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus2 --build-path build/stickcplus2 -u -p PORT .`
+  - M5StickC Plus: `arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus:UploadSpeed=115200 --build-path build/stickcplus -u -p PORT .`
     (ポートは /dev/cu.usbserial-*。Nesso / StickS3 は /dev/cu.usbmodem*)
   - 接続されている機器はセッションによって変わるので、`show` の出力 (power: 行の形式や mode) で判別する
 - シリアル操作: `tools/ser.sh PORT 秒数 "cmd1" "cmd2"` でコマンド送信と出力の取得ができる
