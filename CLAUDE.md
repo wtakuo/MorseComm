@@ -505,7 +505,12 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   StickS3 と Nesso の ESP-NOW での相互通信はユーザーが確認済み
 
 ### 実機テストの手順 (再開時に使う)
-- 書き込み (ボードごとにビルドディレクトリを分ける):
+- **書き込みは sketch.yaml のプロファイルを使う** (2026-11-01 ユーザー要望で作成。プロファイル: nesson1 / sticks3 /
+  stickcplus2 / stickcplus / cardputer。ボードパッケージ・ライブラリのバージョンとボードのオプションを固定してある):
+  `arduino-cli compile --profile <名前> --build-path build/<名前> -u -p PORT .` (全プロファイルのビルドと cardputer の
+  書き込みを確認済み)。ライブラリやボードパッケージを更新したら sketch.yaml のバージョンも直すこと。
+  sketch.yaml.sample はユーザーが参考に置いた別プロジェクトのもの (リポジトリには入れていない)
+- 以下は FQBN を直接指定する場合 (プロファイルと同じ内容。ボードごとにビルドディレクトリを分ける):
   - Nesso N1: `arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-path build/nesso -u -p PORT .`
   - M5StickS3: `arduino-cli compile -b m5stack:esp32:m5stack_sticks3 --build-path build/sticks3 -u -p PORT .`
   - M5StickC Plus2: `arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus2 --build-path build/stickcplus2 -u -p PORT .`

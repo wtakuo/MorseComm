@@ -51,24 +51,25 @@ M5Stack Cardputer (初代) と Cardputer ADV は次のとおりです。**同じ
 
 ## ビルドと書き込み
 
-必要なもの:
-- `arduino-cli`
-- Nesso N1: ESP32 コア `esp32:esp32` 3.3.x、ライブラリ `Arduino_Nesso_N1` (M5GFX に依存)、`RadioLib` (7.x, LoRa 用)
-- M5StickS3 / M5StickC Plus2 / M5StickC Plus: M5Stack のボードパッケージ `m5stack:esp32` 3.3.x、ライブラリ `M5Unified` (M5GFX に依存)
+必要なものは `arduino-cli` (1.x) だけです。機種ごとのボードパッケージ・ライブラリとそのバージョン、ボードのオプションは
+`sketch.yaml` にプロファイルとして書いてあり、初回のビルドで arduino-cli が自動でダウンロードします。
 
-同じフォルダから複数の機種をビルドするので、**ボードごとに別のビルドディレクトリ**を指定します (同じにすると、別の機種向けのファイルを書き込もうとして失敗します)。
+| プロファイル | 機種 | ポートの例 |
+|---|---|---|
+| `nesson1` | Arduino Nesso N1 | /dev/cu.usbmodemXXXX |
+| `sticks3` | M5StickS3 | /dev/cu.usbmodemXXXX |
+| `stickcplus2` | M5StickC Plus2 | /dev/cu.usbserial-XXXX |
+| `stickcplus` | M5StickC Plus (書き込みは 115200bps) | /dev/cu.usbserial-XXXX |
+| `cardputer` | Cardputer (初代) / Cardputer ADV (同じビルド。8MB 用のパーティション) | /dev/cu.usbmodemXXXX |
+
+同じフォルダから複数の機種をビルドするので、**機種ごとに別のビルドディレクトリ** (`--build-path`) を指定します
+(同じにすると、別の機種向けのファイルを書き込もうとして失敗します)。
 
 ```sh
-# Arduino Nesso N1
-arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-path build/nesso -u -p /dev/cu.usbmodemXXXX .
-# M5StickS3
-arduino-cli compile -b m5stack:esp32:m5stack_sticks3 --build-path build/sticks3 -u -p /dev/cu.usbmodemXXXX .
-# M5StickC Plus2
-arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus2 --build-path build/stickcplus2 -u -p /dev/cu.usbserial-XXXX .
-# Cardputer (初代) / Cardputer ADV (同じ FQBN・同じビルド。フラッシュ 8MB 用のパーティションを指定する)
-arduino-cli compile -b m5stack:esp32:m5stack_cardputer:FlashSize=8M,PartitionScheme=default_8MB --build-path build/cardputer -u -p /dev/cu.usbmodemXXXX .
-# M5StickC Plus (高速の書き込みで失敗する個体があるので、そのときは UploadSpeed=115200 を付ける)
-arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus:UploadSpeed=115200 --build-path build/stickcplus -u -p /dev/cu.usbserial-XXXX .
+# ビルドして書き込む (例: Cardputer)
+arduino-cli compile --profile cardputer --build-path build/cardputer -u -p /dev/cu.usbmodemXXXX .
+# ビルドだけ
+arduino-cli compile --profile nesson1 --build-path build/nesson1 .
 ```
 
 キーの種類 (モード) などは各本体に設定として保存されます。
