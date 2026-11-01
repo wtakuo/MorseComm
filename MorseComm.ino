@@ -5,6 +5,8 @@
 //   loop()  (このファイル, 低優先度)      : 画面・ボタン・シリアルコマンド・設定保存
 // 詳細は CLAUDE.md / README.md を参照。
 #include <Arduino.h>
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #include <Preferences.h>
 #include "board.h"
 #include "config.h"
@@ -53,6 +55,7 @@ uint32_t defaultsArmedMs = 0;
 bool defaultsExpired(uint32_t now) { return (int32_t)(now - defaultsArmedMs) >= (int32_t)cfg::DEFAULTS_CONFIRM_MS; }
 uint32_t lastChangeMs = 0, lastUiMs = 0, lastBtnMs = 0, lastStatsMs = 0, lastBatteryMs = 0;
 uint32_t chOverlayUntil = 0;  // この時刻までチャンネル番号を大きく表示する
+uint32_t splashUntil = 0;     // この時刻までスプラッシュスクリーンを出しておく (メイン画面を描かない)
 uint32_t lastInputMs = 0;  // ボタン・タッチ・シリアル入力、USB 給電中
 bool usbPower = true;
 char lineBuf[96];
@@ -491,6 +494,7 @@ void handleCommand(char* line) {
     return;
   } else if (!strcmp(cmd, "show")) {
     power::printStatus();
+    Serial.printf("build: %s\r\n", buildinfo::stamp());
     Serial.printf("touch=%s\r\n", ui::touchAvailable() ? "ok" : "not found");
   } else if (!strcmp(cmd, "defaults")) {
     restoreDefaults();
@@ -778,12 +782,14 @@ void setup() {
   Serial.begin(115200);
 #endif
   ui::begin();
+  ui::drawSplash(buildinfo::stamp());
+  splashUntil = millis() + cfg::SPLASH_MS;
   loadSettings();  // ボードの判別 (Cardputer / ADV) が要るので ui::begin (M5.begin) の後
   bool ok = engine::begin();
   uint8_t mac[6];
   net::ownMac(mac);
-  Serial.printf("MorseComm start (%s%s): MAC %02X:%02X:%02X:%02X:%02X:%02X radio=%s %s\r\n", board::NAME, hw::hasPhoneJack() ? " ADV" : "", mac[0], mac[1],
-                mac[2], mac[3], mac[4], mac[5], radioName(net::radio()), ok ? "ok" : "FAILED");
+  Serial.printf("MorseComm start (%s%s): MAC %02X:%02X:%02X:%02X:%02X:%02X radio=%s %s build=%s\r\n", board::NAME, hw::hasPhoneJack() ? " ADV" : "", mac[0], mac[1],
+                mac[2], mac[3], mac[4], mac[5], radioName(net::radio()), ok ? "ok" : "FAILED", buildinfo::stamp());
   printSettings();
 }
 
@@ -801,7 +807,8 @@ void loop() {
     usbPower = power::usbPowered();
   }
   if (usbPower) lastInputMs = now;  // USB 給電中は眠らない (電池に切り替わった時点から数える)
-  if (now - lastUiMs >= UI_INTERVAL_MS) {
+  bool splash = (int32_t)(now - splashUntil) < 0;  // スプラッシュ中は画面を描かない (操作・送受信は動いている)
+  if (!splash && now - lastUiMs >= UI_INTERVAL_MS) {
     lastUiMs = now;
     lockShared();
     Settings s = g_settings;

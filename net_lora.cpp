@@ -13,6 +13,8 @@
 // LoRa には送信元アドレスが無いので、無線フレームは [送信元 MAC 6 バイト][cw パケット] とする。
 // 全局が同じ周波数でブロードキャストし合う対等な関係 (親機・子機の区別なし)。
 #include "board.h"
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #include "net_internal.h"
 
 #if defined(BOARD_NESSO_N1)

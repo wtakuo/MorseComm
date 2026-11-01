@@ -4,6 +4,8 @@
 // (HWCDC::isPlugged) で判定する。PC につないでいれば眠らない。充電器だけにつないだ場合は電池運用と同じく眠る。
 // スリープ中はバックライト (G38, PWM) を LOW に保持し、G0 のボタン (BtnA) で起こす。保持の解除は hw_m5stick.cpp の begin()。
 #include "board.h"
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #if defined(BOARD_CARDPUTER)
 #include "power.h"
 #include <M5Unified.h>

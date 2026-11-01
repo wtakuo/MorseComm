@@ -1,6 +1,8 @@
 // power_sticks3.cpp — M5StickS3: USB 給電の検出とディープスリープ
 // ボタン (BtnA = GPIO11, BtnB = GPIO12) は ESP32-S3 の RTC GPIO に直結なので、EXT1 で直接起こせる。
 #include "board.h"
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #if defined(BOARD_STICKS3)
 #include "power.h"
 #include <M5Unified.h>

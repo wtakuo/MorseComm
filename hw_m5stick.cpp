@@ -1,6 +1,8 @@
 // hw_m5stick.cpp — M5StickS3 / M5StickC Plus2 / M5StickC Plus / Cardputer の画面・ボタン・電池
 // (M5Unified を使う。タッチなし。Cardputer のキーボードは keyboard_cardputer.cpp)
 #include "board.h"
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #if defined(BOARD_M5UNIFIED)
 #include "hw.h"
 #include <M5Unified.h>

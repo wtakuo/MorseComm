@@ -1,5 +1,7 @@
 // net.cpp — 無線の共通部: 受信キュー、統計、ロス注入、無線の種類による振り分け
 #include "net_internal.h"
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #include <Arduino.h>
 #include <esp_mac.h>
 #include <esp_random.h>

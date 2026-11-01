@@ -34,6 +34,8 @@ using Battery = hw::Battery;
 void begin();
 // 画面を消す (スリープ前)
 void sleepDisplay();
+// 起動時のスプラッシュスクリーン: 中央に "MorseComm"、その下にビルド日時
+void drawSplash(const char* buildStamp);
 void addChar(bool rx, char c);
 void clearText();
 

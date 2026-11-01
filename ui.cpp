@@ -1,4 +1,6 @@
 #include "ui.h"
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #include <Arduino.h>
 #include <string.h>
 
@@ -203,6 +205,21 @@ void begin() {
 }
 
 void sleepDisplay() { hw::displaySleep(); }
+
+void drawSplash(const char* buildStamp) {
+  canvas.fillScreen(COL_BG);
+  canvas.setTextDatum(textdatum_t::middle_center);
+  canvas.setFont(&fonts::Font4);
+  canvas.setTextSize(1);
+  canvas.setTextColor(TFT_WHITE, COL_BG);
+  canvas.drawString("MorseComm", W / 2, H / 2 - 10);
+  useLabelFont();
+  canvas.setTextDatum(textdatum_t::middle_center);
+  canvas.setTextColor(COL_LABEL, COL_BG);
+  canvas.drawString(buildStamp, W / 2, H / 2 + 18);
+  canvas.setTextDatum(textdatum_t::top_left);
+  present();
+}
 
 void addChar(bool rx, char c) { (rx ? rxText : txText).add(c); }
 

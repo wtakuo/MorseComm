@@ -8,6 +8,8 @@
 //   USB 給電は検出できない。
 // Plus: PMIC AXP192 が電源を保つ (ESP32 のディープスリープ中もそのまま)。USB 給電は AXP192 の VBUS 電圧で判定する。
 #include "board.h"
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #if defined(BOARD_STICKC_PLUS2) || defined(BOARD_STICKC_PLUS)
 #include "power.h"
 #include <M5Unified.h>

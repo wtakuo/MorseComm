@@ -2,6 +2,8 @@
 // M5StickS3: ES8311 + アンプ / Cardputer: NS4168 (I2S アンプ)
 // サイドトーンの遅れを小さくするため、I2S の DMA バッファを既定 (256 x 8 ≒ 93ms @22kHz) より大幅に短くする。
 #include "board.h"
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #if defined(BOARD_STICKS3) || defined(BOARD_CARDPUTER)
 #include "tone_out.h"
 #include <M5Unified.h>

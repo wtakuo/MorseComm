@@ -8,6 +8,8 @@
 // キーイベントの FIFO を読み、行 r / 列 c (イベント番号 = r*10 + c + 1, bit7 = 押下) を初代と同じ座標に直す
 // (x = 2r + (c > 3), y = c % 4。M5Cardputer の TCA8418.cpp と同じ)。割り込みは使わずに 20ms ごとに読む。
 #include "board.h"
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #include "hw.h"
 
 #if defined(BOARD_CARDPUTER)

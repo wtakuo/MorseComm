@@ -28,6 +28,9 @@ constexpr uint8_t OUTPUT_PHONES = 1;
 constexpr int HP_VOLUME_DEFAULT = 2;
 constexpr uint32_t TONE_PREVIEW_MS = 150;  // 設定変更時の試聴音の長さ
 
+// ---- 画面 ----
+constexpr uint32_t SPLASH_MS = 3000;  // 起動時のスプラッシュスクリーン (MorseComm とビルド日時) の表示時間
+
 // ---- 設定画面 ----
 constexpr uint32_t DEFAULTS_CONFIRM_MS = 3000;  // DEFAULTS: 1 回目からこの時間内にもう 1 回押すと既定値に戻す
 

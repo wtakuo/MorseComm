@@ -1,5 +1,7 @@
 // power_nesso.cpp — Arduino Nesso N1: USB 給電の検出とディープスリープ
 #include "board.h"
+#include "build_info.h"
+BUILD_INFO_UNIT();
 #if defined(BOARD_NESSO_N1)
 #include "power.h"
 #include <Arduino_Nesso_N1.h>

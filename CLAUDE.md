@@ -417,6 +417,12 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 11. (2026-11-01) M5StickC Plus 対応 (power_stickcplus2.cpp → power_stickc.cpp に共通化)
 12. (2026-11-01) Cardputer (初代) 対応、キーボードでの送信 (tone_out_sticks3.cpp → tone_out_m5speaker.cpp に共通化)
 13. (2026-11-01) Cardputer ADV 対応 (TCA8418 キーボード、OUTPUT = SPEAKER / PHONES と出口ごとの音量)
+14. (2026-11-01) Cardputer を 8MB パーティションに、sketch.yaml (ビルドプロファイル) を追加
+15. (2026-11-01) 起動時のスプラッシュスクリーン (MorseComm + ビルド日時 YYYYMMDDhhmmss, 3 秒, cfg::SPLASH_MS)。
+    ビルド日時は build_info.h の BUILD_INFO_UNIT() で各ソース (.cpp/.ino) のコンパイル日時を登録し、その最新を使う
+    (arduino-cli は変わっていないソースを再コンパイルしないため、1 ファイルの __DATE__/__TIME__ では古くなる)。
+    **ソースファイルを追加したら BUILD_INFO_UNIT() を書くこと**。シリアルの起動メッセージ (build=) と show にも出す。
+    スプラッシュ中も送受信・入力は動いており、メイン画面の描画だけを待つ
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
