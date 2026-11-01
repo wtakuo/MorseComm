@@ -4,7 +4,7 @@
 
 ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不要) を使って
 モールス符号のキーイング (A1A 相当: キーを押している間だけ「出る」) を双方向に伝送する。
-(当初の計画。その後 M5StickS3 / M5StickC Plus2 / M5StickC Plus 対応・LoRa・電波 OFF モード・端末モードを追加。現状は §13)
+(当初の計画。その後 M5StickS3 / M5StickC Plus2 / M5StickC Plus / Cardputer 対応・LoRa・電波 OFF モード・端末モードを追加。現状は §13)
 
 - 受信側は相手のキー状態に合わせてトーンを鳴らす
 - 送信側も自分用のモニタ(サイドトーン)を鳴らす
@@ -16,7 +16,8 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   キー・サイドトーン・送信デコード・スリープは通常どおり。メイン画面は灰色の "OFF" / "RADIO OFF"、KEY1 (チャンネル) は無効。
   設定画面の RADIO は Nesso: ESP-NOW → LoRa → OFF、StickS3 / StickC Plus2: ESP-NOW ↔ OFF
 - 端末モード (`term`): PC のターミナルで打った文字をモールスで送り、受信文字を表示する (2026-10-31 追加)
-- 対応ボード: Arduino Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus (機種が混在しても ESP-NOW で通信できる)
+- 対応ボード: Arduino Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus / M5Stack Cardputer (初代)
+  (機種が混在しても ESP-NOW で通信できる)。Cardputer はキーボードで打った文字も送れる
 
 最大の設計課題は「キーを離したパケットが落ちると押しっぱなしになる」問題。
 **イベント(押す/離す)ではなく、状態+遷移履歴を定期送信し、受信側でウォッチドッグを持つ**
@@ -60,13 +61,14 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   keyer.h               # ストレートキー処理、イアンビックキーヤー (Arduino非依存の状態機械)
   jitter.h              # 受信側ジッタバッファ・再生スケジューラ (Arduino非依存)
   morse_decoder.h       # タイミングからの文字デコード (Arduino非依存)
-  tone_out.h + tone_out_buzzer.cpp (Nesso, Plus2, Plus: LEDC) / tone_out_sticks3.cpp   # トーン出力
+  tone_out.h + tone_out_buzzer.cpp (Nesso, Plus2, Plus: LEDC) / tone_out_m5speaker.cpp (StickS3, Cardputer)  # トーン出力
   net.h / net.cpp / net_internal.h   # 無線の共通部 (受信キュー・統計・ロス注入・無線の種類の振り分け)
   net_espnow.cpp        # ESP-NOW 送受信 (ボード共通)
   net_lora.cpp          # LoRa 送受信 (Nesso N1 のみ。専用タスク、キャリアセンス・休止、送信時刻の付け替え)
   ui.h/.cpp             # 画面 (メイン/設定) の描画とボタン・タッチ入力の解釈 (ボード共通)
-  hw.h + hw_nesso.cpp / hw_m5stick.cpp (StickS3, Plus2, Plus: M5Unified)   # 画面デバイス・ボタン・タッチ・電池
-  power.h + power_nesso.cpp / power_sticks3.cpp / power_stickc.cpp (Plus2, Plus)  # USB 給電検出・ディープスリープ
+  hw.h + hw_nesso.cpp / hw_m5stick.cpp (StickS3, Plus2, Plus, Cardputer: M5Unified)   # 画面デバイス・ボタン・タッチ・電池
+  keyboard_cardputer.cpp  # Cardputer のキーボード (hw::readKey。他のボードでは空の実装)
+  power.h + power_nesso.cpp / power_sticks3.cpp / power_stickc.cpp (Plus2, Plus) / power_cardputer.cpp  # USB 給電検出・スリープ
   (ボードごとの .cpp は全体を `#if defined(BOARD_xxx)` で囲む。Arduino はフォルダ内の全 .cpp をビルドするため)
   peers.h               # 複数局の受信: 送信元 MAC ごとの Receiver + デコーダ、全局 OR (Arduino非依存)
   tools/ser.sh          # シリアルへのコマンド送信と出力取得
@@ -314,6 +316,25 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     MAC [Plus-A] (/dev/cu.usbserial-XXXX), [Plus-B] (/dev/cu.usbserial-XXXX)
   - ユーザー確認済み (2026-11-01): 画面の向き・表示、サイドトーン・受信トーン、ボタン (チャンネル・設定画面・DEFAULTS)、
     電池でのスリープ (画面消灯) とボタンでの復帰、Grove へのキー・パドル接続
+- M5Stack Cardputer (初代, 2026-11-01 調査・実機確認, 1 台):
+  - FQBN: `m5stack:esp32:m5stack_cardputer` (build/cardputer)。ESP32-S3 (StampS3, 8MB)。USB は USB CDC (HWCDC)。
+    既定のパーティションはアプリ 1.3MB で、現状 87% 使用 (足りなくなったらパーティションを変える)
+  - キー: Grove の G1 (白) = ストレート/DIT, G2 (黄) = DAH (ユーザー指定)
+  - キーボード (keyboard_cardputer.cpp, 自前で走査。M5Cardputer ライブラリは使っていない): 74HC138 の A0/A1/A2 =
+    G8/G9/G11 で 8 本の行を選び、7 本の列 G13/G15/G3/G4/G5/G6/G7 (INPUT_PULLUP, 押下 LOW) を読む。
+    行 i, 列 j → x = (i > 3) ? 2j : 2j+1, y = 3 - (i & 3)。キー配列は M5Cardputer の _key_value_map と同じ
+    (fn + ; . , / = ↑ ↓ ← →、fn + ` = esc)。loop() から 20ms ごとに走査し、押された瞬間だけ返す (リピートなし)。
+    v1.1 / ADV は TCA8418 (I2C) なので非対応
+  - キーボードの割り当て (README の表): メインは文字を g_typeBuf に積んで送る (端末モードと同じ StreamKeyer。engine は
+    端末モードかどうかに関係なく常に g_typeBuf を送るようにした)、fn+←→ = チャンネル、esc / ` = 設定画面。
+    設定画面は ↑↓ (; .) = 項目、←→ (, /) = 値、enter = 値を進める、esc = 抜ける。未送信の文字は TX の行に灰色で表示
+  - ボタンは G0 (BtnA) だけで、他機種の KEY2 の役 (短押し = 設定画面 / 長押し = テキスト消去)。設定画面では抜ける
+  - 音: NS4168 (I2S) を M5.Speaker で (StickS3 と同じ tone_out_m5speaker.cpp, DMA 64x4)
+  - 電源: PMIC 無し。USB 給電は検出できないので `HWCDC::isPlugged()` (PC と USB シリアルで通信中) で代用。
+    充電器だけなら電池運用と同じく 3 分で眠る。スリープはバックライト G38 を LOW で gpio_hold し、G0 の EXT1 ANY_LOW で
+    復帰 (起動時に hw::begin で保持を解除)。電池電圧は G10 の ADC (M5.Power)
+  - 実機: Cardputer ⇔ StickS3 の ESP-NOW 双方向で PARIS / CQ TEST を再現 (±1ms)、デコード誤りなし。MAC [Cardputer]
+  - 画面・音・キーボード・ボタン・スリープ・キーの接続はユーザー未確認
 - LoRa (Nesso N1, 2026-10-30 調査・実機確認):
   - SX1262。SPI は画面と共有 (SCK=20, MOSI=21, MISO=22)。CS=GPIO23 (`LORA_CS`), BUSY=GPIO19, DIO1=GPIO15 (`LORA_IRQ`),
     NRST は無し (RADIOLIB_NC)。**画面 (loop) と LoRa タスクが同じ SPI を使うので `hw::lockBus()` で排他している**
@@ -373,6 +394,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 9. (2026-11-01) 設定画面の順番変更、シリアルの CR LF・プロンプト・エコーバック・help の 1 行 1 コマンド化
 10. (2026-11-01) 設定を既定値に戻す DEFAULTS 項目と `defaults` コマンド、help の term の説明を短縮 (80 桁以内)
 11. (2026-11-01) M5StickC Plus 対応 (power_stickcplus2.cpp → power_stickc.cpp に共通化)
+12. (2026-11-01) Cardputer (初代) 対応、キーボードでの送信 (tone_out_sticks3.cpp → tone_out_m5speaker.cpp に共通化)
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
@@ -466,6 +488,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - M5StickS3: `arduino-cli compile -b m5stack:esp32:m5stack_sticks3 --build-path build/sticks3 -u -p PORT .`
   - M5StickC Plus2: `arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus2 --build-path build/stickcplus2 -u -p PORT .`
   - M5StickC Plus: `arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus:UploadSpeed=115200 --build-path build/stickcplus -u -p PORT .`
+  - Cardputer: `arduino-cli compile -b m5stack:esp32:m5stack_cardputer --build-path build/cardputer -u -p PORT .`
     (ポートは /dev/cu.usbserial-*。Nesso / StickS3 は /dev/cu.usbmodem*)
   - 接続されている機器はセッションによって変わるので、`show` の出力 (power: 行の形式や mode) で判別する
 - シリアル操作: `tools/ser.sh PORT 秒数 "cmd1" "cmd2"` でコマンド送信と出力の取得ができる

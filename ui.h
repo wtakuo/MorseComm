@@ -40,8 +40,9 @@ Battery readBattery();
 bool touchAvailable();
 
 // sleepInSec >= 0 のとき、スリープまでの残り秒数を表示する。showChannel のときチャンネル番号を大きく表示する
+// pending: 打ったがまだ送っていない文字 (TX の行に灰色で出す)
 void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec,
-              bool showChannel);
+              bool showChannel, const char* pending = nullptr);
 // editing: タッチの無いボードで、選択中の項目の値を変更中 (ボタンが +/- になる)
 void drawSettings(const Settings& s, Item selected, bool editing, const Battery& bat,
                   DefaultsState defaults = DefaultsState::Idle);

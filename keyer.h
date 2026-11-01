@@ -281,6 +281,12 @@ class TypeBuffer {
   }
   void clear() { len_ = 0; }
   int size() const { return len_; }
+  // 送信待ちの文字を out に写す (表示用。NUL 終端、収まらなければ末尾側を写す)
+  void copyTo(char* out, int cap) const {
+    int n = len_ < cap - 1 ? len_ : cap - 1;
+    for (int i = 0; i < n; i++) out[i] = at(len_ - n + i);
+    out[n] = 0;
+  }
 
   // 先頭の 1 単位を取り出す: 1 文字、空白 (語間)、または "[...]" の略符号。
   // "[" に対応する "]" がまだ打たれていなければ待つ (false)。out は MAX_UNIT + 1 バイト以上

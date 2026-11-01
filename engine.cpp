@@ -153,8 +153,9 @@ bool streamKeys(uint32_t now) {
 }
 
 void readKeys(uint32_t now) {
-  // 端末モードで文字を送っている間はキー・パドルを無視する (送っていなければ普通に使える)
-  if (ctl.termOn && streamKeys(now)) return;
+  // 打った文字 (シリアルの端末モード / Cardputer のキーボード) を送っている間はキー・パドルを無視する
+  // (送っていなければ普通に使える)
+  if (streamKeys(now)) return;
   if (ctl.testOn) {
     textKeyer.update(now);
     cw::KeyEvent ev;

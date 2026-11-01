@@ -588,8 +588,51 @@ void enterSettings(bool on, uint32_t now) {
   lastUiMs = 0;  // すぐ描き直す
 }
 
+// ---- キーボード (Cardputer) ----
+// メイン画面: 文字キー = その文字を送る (打った順に設定の速度で)、BS = まだ送っていない最後の文字を取り消す、
+//             Enter / Tab / Space = 語間、fn+← / fn+→ = チャンネル -1 / +1、esc (fn+`) または ` = 設定画面
+// 設定画面:   ↑ / ↓ (fn なしの ; . でもよい) = 項目の選択、← / → (, /) = 値を減らす / 増やす、
+//             Enter (OK) = 値を進める (DEFAULTS は 2 回で実行)、esc / ` = 設定画面を抜ける (保存)
+void handleKey(int k, uint32_t now) {
+  const int count = ui::itemCount();
+  lastInputMs = now;
+  lastSettingsOpMs = now;
+  lastUiMs = 0;
+  bool esc = k == hw::KEY_ESC || k == '`';
+  if (settingsScreen) {
+    if (esc) enterSettings(false, now);
+    else if (k == hw::KEY_UP || k == ';') selected = (ui::Item)(((int)selected + count - 1) % count);
+    else if (k == hw::KEY_DOWN || k == '.') selected = (ui::Item)(((int)selected + 1) % count);
+    else if (k == hw::KEY_LEFT || k == ',') adjustSelected(-1);
+    else if (k == hw::KEY_RIGHT || k == '/' || k == hw::KEY_ENTER) adjustSelected(+1);
+    return;
+  }
+  bool radioOn = net::radio() != cfg::RADIO_OFF;
+  if (esc) {
+    enterSettings(true, now);
+  } else if (k == hw::KEY_LEFT || k == hw::KEY_RIGHT) {
+    if (radioOn) stepChannel(k == hw::KEY_RIGHT ? +1 : -1, now);
+  } else if (k == hw::KEY_BACKSPACE) {
+    lockShared();
+    g_typeBuf.popBack();
+    unlockShared();
+  } else if (k == hw::KEY_ENTER || k == hw::KEY_TAB || k == ' ') {
+    lockShared();
+    g_typeBuf.push(' ');
+    unlockShared();
+  } else if (k > ' ' && k < 0x7F) {
+    char ch = (k >= 'a' && k <= 'z') ? k - ('a' - 'A') : k;
+    if (ch == '[' || ch == ']' || cw::morseEncode(ch)) {  // 符号の無い文字は無視する
+      lockShared();
+      g_typeBuf.push(ch);
+      unlockShared();
+    }
+  }
+}
+
 void pollInput(uint32_t now) {
   const int count = ui::itemCount();
+  for (int k; (k = hw::readKey()) != hw::KEY_NONE;) handleKey(k, now);
   ui::Button b = ui::pollButtons(now);
   ui::TouchEvent t = ui::pollTouch(settingsScreen);
   if (b != ui::Button::None || t.kind != ui::TouchEvent::None) {
@@ -622,6 +665,11 @@ void pollInput(uint32_t now) {
     return;
   }
   bool longPress = b == ui::Button::Key1Long || b == ui::Button::Key2Long;
+  if (hw::hasKeyboard()) {
+    // 設定画面はキーボードで操作する。ボタン (BtnA) は短押し・長押しとも設定画面を抜ける
+    if (b != ui::Button::None) enterSettings(false, now);
+    return;
+  }
   if (!ui::touchAvailable()) {
     if (editing) {
       if (b == ui::Button::Key1Short) adjustSelected(+1);
@@ -749,7 +797,13 @@ void loop() {
         (defaultsState == ui::DefaultsState::Armed && defaultsExpired(now)))
       defaultsState = ui::DefaultsState::Idle;
     if (settingsScreen) ui::drawSettings(s, selected, editing, battery, defaultsState);
-    else ui::drawMain(s, c, sn, battery, sleepIn, (int32_t)(now - chOverlayUntil) < 0);
+    else {
+      char pending[40];
+      lockShared();
+      g_typeBuf.copyTo(pending, sizeof(pending));
+      unlockShared();
+      ui::drawMain(s, c, sn, battery, sleepIn, (int32_t)(now - chOverlayUntil) < 0, pending);
+    }
   }
   // lastChangeMs はこの loop() の途中 (now より後) に更新されることがあるので符号付きで比べる
   if (saveDirty && !settingsScreen && (int32_t)(now - lastChangeMs) >= (int32_t)SAVE_DELAY_MS) saveSettings();

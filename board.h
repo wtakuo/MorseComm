@@ -4,6 +4,7 @@
 //   M5StickS3        : m5stack:esp32:m5stack_sticks3       → ARDUINO_M5STACK_STICKS3
 //   M5StickC Plus2   : m5stack:esp32:m5stack_stickc_plus2  → ARDUINO_M5STACK_STICKC_PLUS2
 //   M5StickC Plus    : m5stack:esp32:m5stack_stickc_plus   → ARDUINO_M5STACK_STICKC_PLUS
+//   M5Stack Cardputer: m5stack:esp32:m5stack_cardputer     → ARDUINO_M5STACK_CARDPUTER (初代。v1.1 / ADV は未対応)
 #pragma once
 
 #if defined(ARDUINO_ARDUINO_NESSO_N1)
@@ -17,8 +18,12 @@
 #elif defined(ARDUINO_M5STACK_STICKC_PLUS)
 #define BOARD_STICKC_PLUS 1
 #define BOARD_M5UNIFIED 1
+#elif defined(ARDUINO_M5STACK_CARDPUTER)
+#define BOARD_CARDPUTER 1
+#define BOARD_M5UNIFIED 1
+#define BOARD_HAS_KEYBOARD 1  // キーボードで文字を打って送れる (keyboard_cardputer.cpp)
 #else
-#error "Unsupported board (Arduino Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus)"
+#error "Unsupported board (Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus / Cardputer)"
 #endif
 
 namespace board {
@@ -41,6 +46,12 @@ constexpr const char* NAME = "M5StickC Plus2";
 constexpr int PIN_STRAIGHT = 33;
 constexpr int PIN_PADDLE_DIT = 33;
 constexpr int PIN_PADDLE_DAH = 32;
+#elif defined(BOARD_CARDPUTER)
+constexpr const char* NAME = "Cardputer";
+// Grove ポート: G1 = ストレート / DIT, G2 = DAH (ユーザー指定)
+constexpr int PIN_STRAIGHT = 1;
+constexpr int PIN_PADDLE_DIT = 1;
+constexpr int PIN_PADDLE_DAH = 2;
 #elif defined(BOARD_STICKC_PLUS)
 constexpr const char* NAME = "M5StickC Plus";
 // Grove ポート: Plus2 と同じ (G33 = ストレート / DIT, G32 = DAH。ユーザー確認済み)

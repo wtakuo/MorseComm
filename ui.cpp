@@ -268,7 +268,7 @@ int itemCount() { return (int)Item::Count; }
 Battery readBattery() { return hw::battery(); }
 
 void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const Battery& bat, int sleepInSec,
-              bool showChannel) {
+              bool showChannel, const char* pending) {
   char tmp[48];
   canvas.fillScreen(COL_BG);
   useLabelFont();
@@ -337,6 +337,14 @@ void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const B
   snprintf(tmp, sizeof(tmp), "%d wpm", snap.localWpm);
   canvas.drawString(tmp, 26, Y_TX_LABEL);
   drawKeyLamp(Y_TX_LABEL, snap.localDown, COL_TX);
+  // 打ったがまだ送っていない文字 (キーボード / 端末モード) を灰色で。収まらなければ末尾を表示する
+  if (pending && *pending) {
+    constexpr int PX = 92, PW = W - 22 - PX;
+    const char* p = pending;
+    while (*p && canvas.textWidth(p) > PW) p++;
+    canvas.setTextColor(COL_DIM, COL_BG);
+    canvas.drawString(p, PX, Y_TX_LABEL);
+  }
   drawText(txText, TX_ROWS, Y_TX_TEXT, COL_TX);
 
   // チャンネル切り替え直後は番号を大きく表示する
@@ -369,6 +377,10 @@ void drawSettings(const Settings& s, Item selected, bool editing, const Battery&
     canvas.drawString("SETTINGS", 0, 0);
     canvas.setTextColor(COL_DIM, COL_BG);
     canvas.drawString("hold KEY: exit", 72, 0);
+  } else if (hw::hasKeyboard()) {
+    // キーボードの操作 (矢印は fn と ; . , / で、設定画面では fn なしでもよい)
+    canvas.setTextColor(COL_DIM, COL_BG);
+    canvas.drawString("\x18\x19:item \x1b\x1a/OK:change esc:exit", 0, 0);
   } else {
     // ボタンの役割を表示 (A = 正面, B = 側面)
     canvas.setTextColor(editing ? COL_EDIT : COL_DIM, COL_BG);

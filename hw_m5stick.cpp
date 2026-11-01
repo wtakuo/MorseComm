@@ -1,9 +1,10 @@
-// hw_m5stick.cpp — M5StickS3 / M5StickC Plus2 / M5StickC Plus の画面・ボタン・電池 (M5Unified を使う。タッチなし)
+// hw_m5stick.cpp — M5StickS3 / M5StickC Plus2 / M5StickC Plus / Cardputer の画面・ボタン・電池
+// (M5Unified を使う。タッチなし。Cardputer のキーボードは keyboard_cardputer.cpp)
 #include "board.h"
 #if defined(BOARD_M5UNIFIED)
 #include "hw.h"
 #include <M5Unified.h>
-#if defined(BOARD_STICKC_PLUS2)
+#if defined(BOARD_STICKC_PLUS2) || defined(BOARD_CARDPUTER)
 #include <driver/gpio.h>
 #endif
 
@@ -11,6 +12,10 @@ namespace hw {
 namespace {
 #if defined(BOARD_STICKS3)
 constexpr int PIN_BTN[2] = {11, 12};  // BtnA (正面), BtnB (側面)。押下 = LOW
+#elif defined(BOARD_CARDPUTER)
+// ボタンは G0 (BtnA) の 1 つだけ。他機種の KEY2 (側面: 設定画面 / 長押しでテキスト消去) の役にする。
+// チャンネル切り替えなど KEY1 の役はキーボードで行う
+constexpr int PIN_BTN[2] = {-1, 0};
 #else
 constexpr int PIN_BTN[2] = {37, 39};  // StickC Plus2 / Plus: BtnA (正面), BtnB (側面)。押下 = LOW (外部プルアップ)
 #endif
@@ -24,12 +29,14 @@ void begin() {
   gpio_set_level(GPIO_NUM_4, 1);
   gpio_hold_dis(GPIO_NUM_4);
   gpio_hold_dis(GPIO_NUM_27);  // バックライト
+#elif defined(BOARD_CARDPUTER)
+  gpio_hold_dis(GPIO_NUM_38);  // スリープ中に LOW で保持したバックライト (power_cardputer.cpp)
 #endif
   auto cfg = M5.config();
   cfg.serial_baudrate = 0;  // Serial は setup() で初期化済み
   cfg.clear_display = true;
-#if defined(BOARD_STICKS3)
-  cfg.internal_spk = true;   // ES8311 のスピーカー (tone_out_sticks3.cpp)
+#if defined(BOARD_STICKS3) || defined(BOARD_CARDPUTER)
+  cfg.internal_spk = true;   // StickS3: ES8311 / Cardputer: NS4168 のスピーカー (tone_out_m5speaker.cpp)
 #else
   cfg.internal_spk = false;  // StickC Plus2 / Plus のブザー (G2) は tone_out_buzzer.cpp が LEDC で直接鳴らす
 #endif
@@ -44,7 +51,7 @@ void begin() {
 
 lgfx::LGFX_Device& display() { return M5.Display; }
 
-bool button(int i) { return digitalRead(PIN_BTN[i]) == LOW; }
+bool button(int i) { return PIN_BTN[i] >= 0 && digitalRead(PIN_BTN[i]) == LOW; }
 
 bool hasTouch() { return false; }
 

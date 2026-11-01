@@ -1,7 +1,8 @@
-// tone_out_sticks3.cpp — M5StickS3: 内蔵スピーカー (ES8311 + アンプ) を M5Unified の Speaker で駆動
+// tone_out_m5speaker.cpp — 内蔵スピーカーを M5Unified の Speaker で駆動
+// M5StickS3: ES8311 + アンプ / Cardputer: NS4168 (I2S アンプ)
 // サイドトーンの遅れを小さくするため、I2S の DMA バッファを既定 (256 x 8 ≒ 93ms @22kHz) より大幅に短くする。
 #include "board.h"
-#if defined(BOARD_STICKS3)
+#if defined(BOARD_STICKS3) || defined(BOARD_CARDPUTER)
 #include "tone_out.h"
 #include <M5Unified.h>
 

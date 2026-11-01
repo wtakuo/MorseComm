@@ -1,6 +1,6 @@
 # MorseComm — ESP-NOW / LoRa による CW キーイング伝送
 
-Arduino Nesso N1 (ESP32-C6)、M5StickS3 (ESP32-S3)、M5StickC Plus2 / M5StickC Plus (ESP32) の間で、ESP-NOW (Wi-Fi ルータ不要) を使ってモールス符号のキーイングを双方向に伝送します。
+Arduino Nesso N1 (ESP32-C6)、M5StickS3 / Cardputer (ESP32-S3)、M5StickC Plus2 / M5StickC Plus (ESP32) の間で、ESP-NOW (Wi-Fi ルータ不要) を使ってモールス符号のキーイングを双方向に伝送します。
 Nesso N1 どうしなら、ESP-NOW の代わりに **LoRa (920MHz 帯)** でも通信できます ([LoRa](#lora-nesso-n1-のみ))。どちらも親機・子機の区別のない対等な通信です。
 電波を出さない **OFF** にすると、1 台だけでモールス送信の練習に使えます (サイドトーンと送信テキストのデコードは動きます)。
 PC のターミナルから文字を打って送り、受信した文字をターミナルに表示する**端末モード**もあります ([端末モード](#端末モード-term))。
@@ -14,7 +14,7 @@ PC のターミナルから文字を打って送り、受信した文字をタ�
 
 ## ハードウェア
 
-対応ボードは次の 4 機種です。機種が混在していても通信できます。
+対応ボードは次の 5 機種です。機種が混在していても通信できます。
 
 | 項目 | Arduino Nesso N1 | M5StickS3 | M5StickC Plus2 | M5StickC Plus |
 |---|---|---|---|---|
@@ -27,6 +27,19 @@ PC のターミナルから文字を打って送り、受信した文字をタ�
 | 無線 | ESP-NOW / LoRa (SX1262) / OFF | ESP-NOW / OFF | ESP-NOW / OFF | ESP-NOW / OFF |
 | 電源管理 | AW32001 + BQ27220 | M5PM1 | なし (G4 で電源保持) | AXP192 |
 | USB シリアル | USB CDC | USB CDC | USB-UART (CH9102) | USB-UART (FTDI) |
+
+M5Stack Cardputer (初代。v1.1 / ADV は未対応) は次のとおりです。
+
+| 項目 | Cardputer |
+|---|---|
+| MCU | ESP32-S3 (StampS3) |
+| ストレートキー / パドル | Grove の G1 (白線) = ストレート / DIT、G2 (黄線) = DAH |
+| 音 | 内蔵スピーカー (NS4168, I2S) |
+| 画面 | 1.14" 240×135、タッチなし |
+| ボタン | G0 (BtnA) の 1 つ + **キーボード** (56 キー) |
+| 無線 | ESP-NOW / OFF |
+| 電源管理 | なし (USB 給電の代わりに、PC との USB シリアル接続を検出する) |
+| USB シリアル | USB CDC |
 
 キーは本体の Grove ポートにつなぎ、接点を GND に落とします (内部プルアップ、アクティブ Low)。パドルの DIT と DAH は設定画面で入れ替えられます。
 ピンは `board.h` に、パラメータは `config.h` にまとめてあります。
@@ -47,6 +60,8 @@ arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-path build/nesso -u 
 arduino-cli compile -b m5stack:esp32:m5stack_sticks3 --build-path build/sticks3 -u -p /dev/cu.usbmodemXXXX .
 # M5StickC Plus2
 arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus2 --build-path build/stickcplus2 -u -p /dev/cu.usbserial-XXXX .
+# Cardputer (初代)
+arduino-cli compile -b m5stack:esp32:m5stack_cardputer --build-path build/cardputer -u -p /dev/cu.usbmodemXXXX .
 # M5StickC Plus (高速の書き込みで失敗する個体があるので、そのときは UploadSpeed=115200 を付ける)
 arduino-cli compile -b m5stack:esp32:m5stack_stickc_plus:UploadSpeed=115200 --build-path build/stickcplus -u -p /dev/cu.usbserial-XXXX .
 ```
@@ -124,6 +139,26 @@ M5StickS3 にはタッチパネルが無いので、設定画面は「選択」�
 RADIO を OFF にすると Wi-Fi も LoRa も初期化しないので、電波を一切出しません (受信もしません)。
 キー操作・サイドトーン・送信テキストのデコード表示・オートスリープは通常どおり動きます。チャンネルは意味が無いので、KEY1 (チャンネル切り替え) は効きません。
 
+### Cardputer のキーボード
+
+Cardputer では、キーボードで打った文字をそのまま送れます (設定の SPEED の速度で、打った順に 1 文字ずつ)。
+
+| 画面 | キー | 動作 |
+|---|---|---|
+| メイン | 文字・数字・記号 | その文字を送る。まだ送っていない文字は TX の行に灰色で表示する |
+| メイン | del (BS) | まだ送っていない最後の文字を取り消す |
+| メイン | space / enter / tab | 語間 |
+| メイン | `[` `]` で囲む | 文字間を空けずに続けて送る (例: `[SK]`) |
+| メイン | fn + ← (`,`) / fn + → (`/`) | チャンネルを 1 つ戻す / 進める |
+| メイン | esc (fn + `` ` ``、または `` ` `` だけ) | 設定画面へ |
+| メイン | G0 ボタン 短押し / 長押し | 設定画面へ / 表示テキストを消去 |
+| 設定 | ↑ / ↓ (fn + `;` / `.`、設定画面では fn なしでもよい) | 前 / 次の項目 |
+| 設定 | ← / → (`,` / `/`) | 値を減らす / 増やす |
+| 設定 | enter (OK) | 値を進める (DEFAULTS は 2 回押すと実行) |
+| 設定 | esc、または G0 ボタン | 設定画面を抜ける (保存) |
+
+文字を送っている間は、キー・パドルの操作を無視します。
+
 ### オートスリープ (電池運用時)
 
 電池で動いているとき (USB 給電なし) は、次の3つがどれも 3 分間なければディープスリープに入り、画面も消えます。
@@ -137,7 +172,9 @@ RADIO を OFF にすると Wi-Fi も LoRa も初期化しないので、電波�
 **正面か側面のボタンを押すと復帰します。** 復帰は再起動になり、約 1 秒かかります。設定は保存されたまま残ります。
 スリープ中は受信できません (LoRa も止めます)。USB 給電中はスリープしません。
 ただし **M5StickC Plus2 は USB 給電を検出できないので、USB につないでいても 3 分でスリープします** (BtnA / BtnB で復帰)。
-Plus2 はスリープ中も電源保持ピン (G4) を HIGH に保つので、電源は切れません。時間は `config.h` の `SLEEP_TIMEOUT_MS` で変えられます。
+Plus2 はスリープ中も電源保持ピン (G4) を HIGH に保つので、電源は切れません。
+**Cardputer は USB 給電を検出できないので、PC と USB シリアルで通信できているときだけ「USB 給電中」とみなします**
+(充電器だけにつないだときは 3 分でスリープします)。復帰は G0 ボタンです (キーボードでは復帰しません)。時間は `config.h` の `SLEEP_TIMEOUT_MS` で変えられます。
 
 ### シリアルコマンド (115200 bps)
 
@@ -253,9 +290,10 @@ Nesso N1 では画面と LoRa が同じ SPI バスを使うので、画面の転
 | `keyer.h` | デバウンス、アイアンビックキーヤー (A/B)、テキスト自動キーイング、端末モードの送信待ちバッファと 1 文字ずつのキーヤー |
 | `morse_decoder.h` / `morse_table.h` | デコーダ / 符号表 |
 | `ui.*` | 画面描画とボタン・タッチ入力の解釈 (ボード共通) |
-| `hw.h`, `hw_nesso.cpp`, `hw_m5stick.cpp` | 画面・ボタン・タッチ・電池 (Nesso / M5Unified の 3 機種) |
-| `tone_out.h`, `tone_out_buzzer.cpp`, `tone_out_sticks3.cpp` | ブザー (Nesso, Plus2, Plus) / スピーカー (StickS3) |
-| `power.h`, `power_nesso.cpp`, `power_sticks3.cpp`, `power_stickc.cpp` (Plus2 / Plus) | USB 給電の検出、ディープスリープ (ボードごと) |
+| `hw.h`, `hw_nesso.cpp`, `hw_m5stick.cpp` | 画面・ボタン・タッチ・電池 (Nesso / M5Unified の 4 機種) |
+| `keyboard_cardputer.cpp` | Cardputer のキーボード (キーマトリクスの走査) |
+| `tone_out.h`, `tone_out_buzzer.cpp`, `tone_out_m5speaker.cpp` | ブザー (Nesso, Plus2, Plus) / スピーカー (StickS3, Cardputer) |
+| `power.h`, `power_nesso.cpp`, `power_sticks3.cpp`, `power_stickc.cpp` (Plus2 / Plus), `power_cardputer.cpp` | USB 給電の検出、ディープスリープ (ボードごと) |
 | `net.h`, `net.cpp`, `net_internal.h` | 無線の共通部 (受信キュー、統計、ロス注入、無線の種類の切り替え) |
 | `net_espnow.cpp` | ESP-NOW (ボード共通) |
 | `net_lora.cpp` | LoRa (Nesso N1 のみ。キャリアセンス・休止・送信時刻の付け替え) |

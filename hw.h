@@ -28,4 +28,19 @@ void displaySleep();
 void lockBus();
 void unlockBus();
 
+// キーボード (Cardputer)。押された瞬間のキーを 1 つずつ返す (無ければ KEY_NONE)。実装は keyboard_cardputer.cpp
+enum : int {
+  KEY_NONE = -1,
+  KEY_ENTER = '\r',
+  KEY_BACKSPACE = 0x08,
+  KEY_TAB = '\t',
+  KEY_ESC = 0x1B,
+  KEY_UP = 0x100,  // fn + ;
+  KEY_DOWN,        // fn + .
+  KEY_LEFT,        // fn + ,
+  KEY_RIGHT,       // fn + /
+};
+bool hasKeyboard();
+int readKey();
+
 }  // namespace hw
