@@ -439,7 +439,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 
 ### 書き込んであるビルド (2026-11-01)
 - 全 11 台 (Nesso ×2, StickS3, Plus2 ×2, Plus ×2, Cardputer, Cardputer ADV) にコミット 685479e のビルドを書き込み済み。
-  スプラッシュの表示を StickS3・Nesso・Plus2・Cardputer (初代・ADV) でユーザーが確認済み (Plus は未確認)
+  スプラッシュの表示を StickS3・Nesso・Plus2・Plus・Cardputer (初代・ADV) の全機種でユーザーが確認済み
 
 ### 次にやること (ユーザー予定)
 - LoRa を距離のある場所で試験する (ユーザーが後日実施)。結果 (最上段の dBm / L / R / W、デコードの具合) を聞いて、
