@@ -16,7 +16,7 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   キー・サイドトーン・送信デコード・スリープは通常どおり。メイン画面は灰色の "OFF" / "RADIO OFF"、KEY1 (チャンネル) は無効。
   設定画面の RADIO は Nesso: ESP-NOW → LoRa → OFF、StickS3 / StickC Plus2: ESP-NOW ↔ OFF
 - 端末モード (`term`): PC のターミナルで打った文字をモールスで送り、受信文字を表示する (2026-10-31 追加)
-- 対応ボード: Arduino Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus / M5Stack Cardputer (初代)
+- 対応ボード: Arduino Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus / M5Stack Cardputer (初代) / Cardputer ADV
   (機種が混在しても ESP-NOW で通信できる)。Cardputer はキーボードで打った文字も送れる
 
 最大の設計課題は「キーを離したパケットが落ちると押しっぱなしになる」問題。
@@ -336,6 +336,21 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - 実機: Cardputer ⇔ StickS3 の ESP-NOW 双方向で PARIS / CQ TEST を再現 (±1ms)、デコード誤りなし。MAC [Cardputer]
   - ユーザー確認済み (2026-11-01): 画面の向き・表示、サイドトーン・受信トーン、キーボードでの送信 (灰色の未送信表示・del・
     fn+←→ のチャンネル)、設定画面の矢印・enter・esc (DEFAULTS を含む)、Grove のキー・パドル、電池でのスリープと G0 での復帰
+- M5Stack Cardputer ADV (2026-11-01 調査・実機確認, 1 台, MAC [Cardputer-ADV]):
+  - ボードパッケージに ADV 専用の FQBN は無い。**初代と同じ `m5stack_cardputer` でビルドし、M5Unified が起動時に
+    board_M5CardputerADV と判別する** (M5GFX の probe)。実行時に `M5.getBoard()` で分岐する (hw::hasPhoneJack)
+  - キーボード: TCA8418 (内部 I2C = M5.In_I2C, SDA G8 / SCL G9, アドレス 0x34, INT G11 は使わず 20ms ごとに FIFO を読む)。
+    KP_GPIO_1/2 = 0x7F/0xFF (7 行 x 8 列)。イベント = 行 r*10 + 列 c + 1、bit7 = 押下。座標 x = 2r + (c > 3), y = c % 4
+    (M5Cardputer の TCA8418.cpp と同じ)。押下イベントごとにキーを出す。**ADV では G8/G9 が I2C なので初代のマトリクス走査をしない**
+  - 音: ES8311 コーデック + NS4150B アンプ + 3.5mm 端子。M5Unified が ES8311 を設定する (internal_spk)。公式資料:
+    "When a 3.5mm headphone jack is inserted, the speaker amplifier will be disabled" → 出口はハードウェアが切り替え、
+    ソフトでは検出できない。ユーザーの選択で設定に OUTPUT (SPEAKER / PHONES) を追加し、PHONES はヘッドフォン向けの小さい
+    音量テーブル (tone_out_m5speaker.cpp の VOLUME_PHONES)、音量は出口ごとに保存 (Preferences: out, hpvol)。
+    OUTPUT 項目は ADV でだけ表示 (ui の itemShown / itemAt / stepItem で表示する項目を機種ごとに絞る)
+  - loadSettings は M5.begin (ui::begin) の後に呼ぶようにした (ADV の判別が要るため)
+  - Grove (G1 = ストレート/DIT, G2 = DAH)、G0 ボタン、スリープ (G0 で復帰、バックライト G38 を保持) は初代と同じ
+  - 実機: ADV ⇔ StickS3 の ESP-NOW 双方向で PARIS / CQ TEST を再現 (±1ms)、デコード誤りなし。`output` コマンドを確認
+  - 画面・音 (スピーカー / ヘッドフォン)・キーボード・ボタン・スリープ・キーの接続はユーザー未確認
 - LoRa (Nesso N1, 2026-10-30 調査・実機確認):
   - SX1262。SPI は画面と共有 (SCK=20, MOSI=21, MISO=22)。CS=GPIO23 (`LORA_CS`), BUSY=GPIO19, DIO1=GPIO15 (`LORA_IRQ`),
     NRST は無し (RADIOLIB_NC)。**画面 (loop) と LoRa タスクが同じ SPI を使うので `hw::lockBus()` で排他している**
@@ -396,6 +411,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 10. (2026-11-01) 設定を既定値に戻す DEFAULTS 項目と `defaults` コマンド、help の term の説明を短縮 (80 桁以内)
 11. (2026-11-01) M5StickC Plus 対応 (power_stickcplus2.cpp → power_stickc.cpp に共通化)
 12. (2026-11-01) Cardputer (初代) 対応、キーボードでの送信 (tone_out_sticks3.cpp → tone_out_m5speaker.cpp に共通化)
+13. (2026-11-01) Cardputer ADV 対応 (TCA8418 キーボード、OUTPUT = SPEAKER / PHONES と出口ごとの音量)
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
@@ -461,7 +477,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   送信中はキー・パドル無視。エコーは即時、行頭 "> " (打った文字) / "< " (受信)。BS は未送信分だけ取り消し、
   符号の無い文字は BEL。Ctrl-C / Ctrl-D で終了。端末モード中は log と "settings saved" を出さない。
   StickS3 (RADIO OFF) でエコー・BS・終了を確認。ユーザーが端末モードの動作を確認済み (2 台間の確認はまだ)
-- シリアルコマンド: ch N / radio espnow|lora|off / term / defaults / mode / wpm / side N|on|off / rxtone / vol / swap / jitter /
+- シリアルコマンド: ch N / radio espnow|lora|off / term / defaults / output speaker|phones (ADV) / mode / wpm / side N|on|off / rxtone / vol / swap / jitter /
   test on [TEXT] (`[SK]` で文字間なし送信) / test off / loss N / dropup 0|1 / log 0|1 / stats / show / clear / save /
   sleep / help (README に一覧)。`stats` の `|` 以降は送信側 (無線の種類, sent, csBusy, air など)
 - 設定は Preferences (名前空間 "morse") に保存。キー: mode wpm sideon sidehz rxhz vol swap ch radio、
