@@ -39,7 +39,7 @@ constexpr uint32_t SETTINGS_TIMEOUT_MS = 30000;  // 設定画面を無操作で�
 constexpr size_t SERIAL_TX_BUFFER = 4096;
 
 Preferences prefs;
-ui::Item selected = ui::Item::Mode;
+ui::Item selected = ui::Item::Radio;
 bool settingsScreen = false;
 bool editing = false;  // タッチの無いボード: 選択中の項目の値を変更中
 uint32_t lastSettingsOpMs = 0;
@@ -51,10 +51,30 @@ uint32_t lastInputMs = 0;  // ボタン・タッチ・シリアル入力、USB �
 bool usbPower = true;
 char lineBuf[96];
 int lineLen = 0;
+// コマンド入力のプロンプト。ログなどが割り込んだら改行して区切り、出力が静まったら打ちかけの行ごと出し直す
+constexpr const char* PROMPT = "morse> ";
+constexpr uint32_t PROMPT_QUIET_MS = 300;
+bool promptShown = false;
+bool lastWasCr = false;     // CR LF を 1 回の改行として扱う
+uint32_t lastAsyncMs = 0;   // 最後に非同期の出力 (ログ・統計など) をした時刻
 // 端末モード (シリアルで打った文字を送り、受信した文字を表示する)
 bool termMode = false;
 char termDir = 0;        // 最後に表示した向き: '>' = 打った文字, '<' = 受信した文字
 bool termLastCr = false;  // 直前が CR (CR LF を 1 回の改行として扱う)
+
+// ---- コンソール (プロンプト・エコー) ----
+void showPrompt() {
+  Serial.print(PROMPT);
+  Serial.write((const uint8_t*)lineBuf, lineLen);
+  promptShown = true;
+}
+
+// 非同期の出力 (ログ・統計・保存の通知など) の前に呼ぶ: プロンプトの行を改行で区切る
+void asyncOut() {
+  if (promptShown) Serial.print("\r\n");
+  promptShown = false;
+  lastAsyncMs = millis();
+}
 
 // ---- 設定 ----
 // このボードで選べる無線の種類 (設定画面ではこの順に切り替わる)
@@ -142,7 +162,10 @@ void saveSettings() {
   prefs.putUChar("radio", s.radio);
   prefs.end();
   saveDirty = false;
-  if (!termMode) Serial.println("settings saved");
+  if (!termMode) {
+    asyncOut();
+    Serial.print("settings saved\r\n");
+  }
 }
 
 template <typename F>
@@ -172,12 +195,13 @@ void printSettings() {
   unlockShared();
   Serial.printf(
       "radio=%s ch=%u mode=%s wpm=%u side=%s,%uHz rx=%uHz vol=%u swap=%u jitter=%ums | test=%s \"%s\" loss=%u%% dropup=%u "
-      "log=%u\n",
+      "log=%u\r\n",
       radioName(s.radio), s.channel, cw::keyModeName((cw::KeyMode)s.mode), s.wpm, s.sideOn ? "on" : "off", s.sideHz,
       s.rxHz, s.volume, s.swap, s.jitterMs, c.testOn ? "on" : "off", c.testText, c.lossPct, c.dropUp, g_logOn);
 }
 
 void printStats() {
+  asyncOut();
   lockShared();
   Snapshot sn = g_snapshot;
   unlockShared();
@@ -185,7 +209,7 @@ void printStats() {
   Serial.printf(
       "STATS rx=%u lost=%u (%.1f%%) stale=%u resync=%u late=%u wd=%u reassert=%u restart=%u rssi=%d offset=%ld "
       "link=%u stations=%d bat=%d%%%s heap=%u/%u | %s tx=%u injDrop=%u sent=%u sendErr=%u cbFail=%u rxQDrop=%u rxErr=%u "
-      "csBusy=%u air=%ums\n",
+      "csBusy=%u air=%ums\r\n",
       sn.rx.packets, sn.rx.lost, total ? 100.0 * sn.rx.lost / total : 0.0, sn.rx.stale, sn.rx.resyncs, sn.rx.late,
       sn.rx.watchdogs, sn.rx.reasserts, sn.rx.restarts, sn.rssi, (long)sn.offset, sn.linkUp, sn.stations,
       battery.valid ? battery.percent : -1, battery.charging ? "(chg)" : "", ESP.getFreeHeap(), ESP.getMinFreeHeap(),
@@ -193,26 +217,53 @@ void printStats() {
       sn.net.rxDropped, sn.net.rxErr, sn.net.csBusy, sn.net.airMs);
 }
 
-// シリアルへの出力は US-ASCII だけにする (端末によっては UTF-8 で表示が乱れるため)
+// シリアルへの出力は US-ASCII だけにし、改行は CR LF にする (端末によっては UTF-8 や LF だけの改行で表示が乱れるため)
 void printHelp() {
-  Serial.printf(
-      "commands:\n"
-      "  ch N              channel (%d-%d)\n"
-      "  radio espnow|lora|off   radio type (off = no transmission; restarts)\n"
-      "  mode straight|iambic_a|iambic_b\n"
-      "  wpm N             keyer speed   vol 0-5   swap 0|1 (paddle)   jitter N (ms)\n"
-      "  side N|on|off     sidetone freq / on / off   rxtone N   receive tone freq\n"
-      "  term              terminal mode: type to send, received text is shown (Ctrl-C to quit)\n"
-      "  test on [TEXT] | test off   send TEXT repeatedly at the current WPM\n"
-      "  loss N            drop N%% of sent packets   dropup 0|1   drop packets with key UP\n"
-      "  log 0|1           transition log and stats every 5 s\n"
-      "  stats   show   clear   save   sleep   help\n",
-      cfg::CH_MIN, cfg::CH_MAX);
+  struct Line {
+    const char* cmd;
+    const char* desc;
+  };
+  static const Line LINES[] = {
+      {"ch N", "channel (CH_MIN-CH_MAX)"},
+      {"radio RADIOS", "radio type (off = no transmission; restarts)"},
+      {"mode straight|iambic_a|iambic_b", "key mode"},
+      {"wpm N", "keyer speed (WPM)"},
+      {"swap 0|1", "swap paddle DIT and DAH"},
+      {"side N", "sidetone frequency (Hz)"},
+      {"side on|off", "sidetone on / off"},
+      {"rxtone N", "receive tone frequency (Hz)"},
+      {"vol N", "volume (0-5)"},
+      {"jitter N", "jitter buffer delay (ms)"},
+      {"term", "terminal mode: type to send, received text is shown (Ctrl-C to quit)"},
+      {"test on [TEXT]", "send TEXT repeatedly at the current WPM"},
+      {"test off", "stop the test"},
+      {"loss N", "drop N% of sent packets (test)"},
+      {"dropup 0|1", "drop packets with key UP (test)"},
+      {"log 0|1", "transition log and stats every 5 s"},
+      {"stats", "show statistics"},
+      {"show", "show settings and power status"},
+      {"clear", "clear the text on the screen"},
+      {"save", "save settings now"},
+      {"sleep", "go to sleep now"},
+      {"help", "show this help"},
+  };
+  Serial.print("commands:\r\n");
+  for (const Line& l : LINES) {
+    char cmd[40], desc[96];
+    // 機種・設定によって変わる部分を埋める
+    if (!strcmp(l.cmd, "radio RADIOS"))
+      snprintf(cmd, sizeof(cmd), "radio %s", net::loraAvailable() ? "espnow|lora|off" : "espnow|off");
+    else snprintf(cmd, sizeof(cmd), "%s", l.cmd);
+    if (!strcmp(l.desc, "channel (CH_MIN-CH_MAX)")) snprintf(desc, sizeof(desc), "channel (%d-%d)", cfg::CH_MIN, cfg::CH_MAX);
+    else snprintf(desc, sizeof(desc), "%s", l.desc);
+    Serial.printf("  %-32s %s\r\n", cmd, desc);
+  }
 }
 
 // ---- スリープ ----
 void goToSleep() {
-  Serial.println("going to sleep (wake: KEY1/KEY2)");
+  asyncOut();
+  Serial.print("going to sleep (wake: button)\r\n");
   if (saveDirty) saveSettings();
   net::end();
   ui::sleepDisplay();
@@ -246,7 +297,8 @@ void restartIfRadioChanged() {
   uint8_t r = g_settings.radio;
   unlockShared();
   if (r == net::radio()) return;
-  Serial.printf("radio changed to %s: restarting\n", radioName(r));
+  asyncOut();
+  Serial.printf("radio changed to %s: restarting\r\n", radioName(r));
   saveSettings();
   net::end();
   delay(50);
@@ -274,12 +326,15 @@ void enterTerm(bool on) {
     if (on) c.testOn = false;
   });
   if (on) {
+    promptShown = false;
     lockShared();
     int wpm = g_settings.wpm;
     unlockShared();
     Serial.printf("\r\n[terminal mode: %d WPM. Type to send; received text follows '<'. Ctrl-C to quit]\r\n", wpm);
   } else {
     Serial.print("\r\n[terminal mode off]\r\n");
+    promptShown = false;
+    lastAsyncMs = 0;  // すぐプロンプトを出す
   }
 }
 
@@ -396,7 +451,7 @@ void handleCommand(char* line) {
     return;
   } else if (!strcmp(cmd, "show")) {
     power::printStatus();
-    Serial.printf("touch=%s\n", ui::touchAvailable() ? "ok" : "not found");
+    Serial.printf("touch=%s\r\n", ui::touchAvailable() ? "ok" : "not found");
   } else if (!strcmp(cmd, "clear")) {
     ui::clearText();
   } else if (!strcmp(cmd, "save")) {
@@ -418,15 +473,36 @@ void pollSerial() {
       handleTermChar(ch);
       continue;
     }
-    if (ch == '\r' || ch == '\n') {
+    lastInputMs = millis();
+    bool cr = ch == '\r';
+    if (ch == '\n' && lastWasCr) {  // CR LF の LF
+      lastWasCr = false;
+      continue;
+    }
+    lastWasCr = cr;
+    if (!promptShown) showPrompt();  // ログの後などでプロンプトが消えていたら出し直してから入力を受ける
+    if (cr || ch == '\n') {
+      Serial.print("\r\n");
+      promptShown = false;
       if (lineLen) {
         lineBuf[lineLen] = 0;
-        lastInputMs = millis();
-        handleCommand(lineBuf);
         lineLen = 0;
+        handleCommand(lineBuf);
+        if (termMode) continue;  // term コマンドで端末モードに入った
       }
-    } else if (lineLen < (int)sizeof(lineBuf) - 1) {
+      showPrompt();
+    } else if (ch == '\b' || ch == 0x7F) {
+      if (lineLen) {
+        lineLen--;
+        Serial.print("\b \b");
+      }
+    } else if (ch == 0x03) {  // Ctrl-C: 打ちかけの行を捨てる
+      lineLen = 0;
+      Serial.print("^C\r\n");
+      showPrompt();
+    } else if (ch >= 0x20 && ch < 0x7F && lineLen < (int)sizeof(lineBuf) - 1) {
       lineBuf[lineLen++] = ch;
+      Serial.write(ch);  // エコーバック
     }
   }
 }
@@ -484,7 +560,10 @@ void pollInput(uint32_t now) {
     lastSettingsOpMs = now;
     lastUiMs = 0;
   }
-  if (g_logOn && t.kind != ui::TouchEvent::None) Serial.printf("touch x=%d y=%d kind=%d\n", t.x, t.y, t.kind);
+  if (g_logOn && t.kind != ui::TouchEvent::None) {
+    asyncOut();
+    Serial.printf("touch x=%d y=%d kind=%d\r\n", t.x, t.y, t.kind);
+  }
 
   if (!settingsScreen) {
     bool radioOn = net::radio() != cfg::RADIO_OFF;  // 電波 OFF ではチャンネルは意味が無いので切り替えない
@@ -555,18 +634,21 @@ void drainOutput() {
             Serial.write(it.c == cw::CHAR_UNKNOWN ? '?' : it.c);
           }
         } else if (g_logOn) {
+          asyncOut();
           const char* tag = it.kind == OutItem::CharRx ? "RXCHR" : "TXCHR";
-          if (it.c == cw::CHAR_UNKNOWN) Serial.printf("%s <unknown>\n", tag);
-          else Serial.printf("%s '%c'\n", tag, it.c);
+          if (it.c == cw::CHAR_UNKNOWN) Serial.printf("%s <unknown>\r\n", tag);
+          else Serial.printf("%s '%c'\r\n", tag, it.c);
         }
         break;
       case OutItem::LogLocal:
         // 直前の状態の長さ: DOWN になった → 直前の UP の長さ
-        Serial.printf("TX %c t=%lu prev%c=%lu\n", it.state ? 'D' : 'U', (unsigned long)it.t, it.state ? 'U' : 'D',
+        asyncOut();
+        Serial.printf("TX %c t=%lu prev%c=%lu\r\n", it.state ? 'D' : 'U', (unsigned long)it.t, it.state ? 'U' : 'D',
                       (unsigned long)it.dur);
         break;
       case OutItem::LogRemote:
-        Serial.printf("RX %c t=%lu prev%c=%lu%s p%u\n", it.state ? 'D' : 'U', (unsigned long)it.t, it.state ? 'U' : 'D',
+        asyncOut();
+        Serial.printf("RX %c t=%lu prev%c=%lu%s p%u\r\n", it.state ? 'D' : 'U', (unsigned long)it.t, it.state ? 'U' : 'D',
                       (unsigned long)it.dur, eventKindName(it.eventKind), it.peer);
         break;
     }
@@ -591,7 +673,7 @@ void setup() {
   bool ok = engine::begin();
   uint8_t mac[6];
   net::ownMac(mac);
-  Serial.printf("MorseComm start (%s): MAC %02X:%02X:%02X:%02X:%02X:%02X radio=%s %s\n", board::NAME, mac[0], mac[1],
+  Serial.printf("MorseComm start (%s): MAC %02X:%02X:%02X:%02X:%02X:%02X radio=%s %s\r\n", board::NAME, mac[0], mac[1],
                 mac[2], mac[3], mac[4], mac[5], radioName(net::radio()), ok ? "ok" : "FAILED");
   printSettings();
 }
@@ -628,5 +710,7 @@ void loop() {
     lastStatsMs = now;
     printStats();
   }
+  // ログなどの出力が静まったらプロンプトを出し直す
+  if (!termMode && !promptShown && now - lastAsyncMs >= PROMPT_QUIET_MS) showPrompt();
   delay(2);
 }

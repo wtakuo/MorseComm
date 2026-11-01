@@ -18,7 +18,7 @@ bool usbPowered() { return M5.Power.getVBUSVoltage() > VBUS_PRESENT_MV; }
 bool wokeFromSleep() { return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1; }
 
 void printStatus() {
-  Serial.printf("power: usb=%d vbus=%dmV bat=%dmV btnA=%d btnB=%d wake=%d\n", usbPowered(), M5.Power.getVBUSVoltage(),
+  Serial.printf("power: usb=%d vbus=%dmV bat=%dmV btnA=%d btnB=%d wake=%d\r\n", usbPowered(), M5.Power.getVBUSVoltage(),
                 M5.Power.getBatteryVoltage(), digitalRead(PIN_BTN_A), digitalRead(PIN_BTN_B),
                 (int)esp_sleep_get_wakeup_cause());
 }

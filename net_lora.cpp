@@ -243,7 +243,7 @@ bool begin(uint8_t channel) {
   }
   hw::unlockBus();
   if (st != RADIOLIB_ERR_NONE) {
-    Serial.printf("LoRa: init failed (%d)\n", st);
+    Serial.printf("LoRa: init failed (%d)\r\n", st);
     return false;
   }
   curChannel = wantChannel = channel;

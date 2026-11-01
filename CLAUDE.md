@@ -350,6 +350,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 7. シリアル出力を US-ASCII のみに (2026-10-31)、端末モード `term` を追加 (ユーザー確認済み)
 8. M5StickC Plus2 対応 (2026-10-31, §10)。hw_sticks3.cpp → hw_m5stick.cpp、tone_out_nesso.cpp → tone_out_buzzer.cpp に共通化。
    2026-11-01 にキー・パドル接続を含めてユーザーが全項目を確認済み
+9. (2026-11-01) 設定画面の順番変更、シリアルの CR LF・プロンプト・エコーバック・help の 1 行 1 コマンド化
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 / M5StickS3 / M5StickC Plus2) すべて、ユーザーが実機で動作確認済み。未コミットの変更なし
@@ -379,7 +380,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - 最上段: [CHn] x局数(2局以上) dBm L% R W ... 電池
   - 設定画面: KEY2 短押しで入る。項目はタッチまたは KEY1(次)/KEY2(前) で選び、右側のタッチ [+]/[-] で変更
     (押し続けで連続)。KEY1/KEY2 長押し または 30 秒無操作で抜けて保存。
-    項目: MODE / SPEED / SIDETONE / SIDE FREQ / RX FREQ / VOLUME / PADDLE / RADIO (チャンネルは設定画面に無い)。
+    項目 (表示順, 2026-11-01 ユーザー指定): RADIO / MODE / PADDLE / SPEED / SIDETONE / VOLUME / SIDE FREQ / RX FREQ
+    (ui.h の enum Item の並び = 表示順。チャンネルは設定画面に無い)。
     8 項目は画面 (7 行) に収まらないので、選択中の項目が見えるようにスクロールする (ui.cpp の listTop)
   - RADIO: Nesso は ESP-NOW → LoRa → OFF、StickS3 / StickC Plus2 は ESP-NOW ↔ OFF。動作中と違う値には " *" を付け、
     設定画面を抜けたときに保存して再起動する (MorseComm.ino の restartIfRadioChanged)
@@ -394,7 +396,11 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   実機 2 台で、同チャンネルのみ受信・別チャンネルは受信しないことを確認済み。3 局以上はホストテストのみ (実機 2 台しかない)
 - シリアル出力 (2026-10-31, ユーザー要望): **US-ASCII のみ** (help も英語)。日本語を含む長い出力がターミナルで途中で
   切れていた原因は、USB CDC (HWCDC) の送信バッファ既定 256 バイト + `setTxTimeoutMs(0)` で入りきらない分が捨てられること。
-  `Serial.setTxBufferSize(4096)` で対処 (SERIAL_TX_BUFFER)。シリアルに出す文字列に日本語を入れないこと
+  `Serial.setTxBufferSize(4096)` で対処 (SERIAL_TX_BUFFER)。シリアルに出す文字列に日本語を入れないこと。
+  **改行は CR LF** (2026-11-01 ユーザー要望。文字列中は "\r\n" と書く。Serial.println は使わなくてよい)
+- コマンド入力 (2026-11-01 ユーザー要望): プロンプト "morse> " を出し、打った文字をエコーバック。BS で 1 文字削除、
+  Ctrl-C で行を捨てる、CR LF は 1 回の改行。ログ・統計などの非同期出力は asyncOut() を先に呼んで行を区切り、
+  出力が 300ms 止んだら loop() がプロンプトと打ちかけの文字を出し直す。help は 1 行 1 コマンド (列をそろえる)
 - 端末モード `term` (2026-10-31, ユーザー要望): PC のターミナルで打った文字を送り、受信文字を表示する。
   loop が `g_typeBuf` (keyer.h の TypeBuffer, lockShared で保護) に積み、engine の StreamKeyer が 1 単位ずつ
   (1 文字 / "[SK]" 略符号 / 空白 = 語間) 設定の WPM で送る。前の文字の終わりから文字間 3 dit (語間 7 dit)。

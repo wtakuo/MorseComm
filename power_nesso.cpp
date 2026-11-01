@@ -41,7 +41,7 @@ bool wokeFromSleep() { return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_E
 
 void printStatus() {
   pinMode(PIN_IRQ, INPUT);
-  Serial.printf("power: usb=%d irq(GPIO%d)=%d keyMask=%02X sysMask=%02X wake=%d\n", usbPowered(), PIN_IRQ,
+  Serial.printf("power: usb=%d irq(GPIO%d)=%d keyMask=%02X sysMask=%02X wake=%d\r\n", usbPowered(), PIN_IRQ,
                 digitalRead(PIN_IRQ), readReg(EXP_KEYS, REG_INT_MASK), readReg(EXP_SYS, REG_INT_MASK),
                 (int)esp_sleep_get_wakeup_cause());
 }

@@ -8,7 +8,8 @@
 namespace ui {
 
 // 設定画面の項目 (項目数は itemCount() を使うこと)
-enum class Item : uint8_t { Mode, Wpm, SideOn, SideHz, RxHz, Volume, Swap, Radio, Count };
+// 並び順がそのまま画面の表示順 (2026-11-01 ユーザー指定)
+enum class Item : uint8_t { Radio, Mode, Swap, Wpm, SideOn, Volume, SideHz, RxHz, Count };
 int itemCount();
 
 enum class Button : uint8_t { None, Key1Short, Key1Long, Key2Short, Key2Long };

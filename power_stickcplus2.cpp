@@ -27,7 +27,7 @@ bool wokeFromSleep() {
 }
 
 void printStatus() {
-  Serial.printf("power: usb=unknown bat=%dmV btnA=%d btnB=%d wake=%d\n", M5.Power.getBatteryVoltage(),
+  Serial.printf("power: usb=unknown bat=%dmV btnA=%d btnB=%d wake=%d\r\n", M5.Power.getBatteryVoltage(),
                 digitalRead(PIN_BTN_A), digitalRead(PIN_BTN_B), (int)esp_sleep_get_wakeup_cause());
 }
 
