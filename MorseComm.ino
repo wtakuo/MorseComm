@@ -494,7 +494,7 @@ void handleCommand(char* line) {
     return;
   } else if (!strcmp(cmd, "show")) {
     power::printStatus();
-    Serial.printf("build: %s\r\n", buildinfo::stamp());
+    Serial.printf("build: %s commit: %s\r\n", buildinfo::stamp(), buildinfo::commit());
     Serial.printf("touch=%s\r\n", ui::touchAvailable() ? "ok" : "not found");
   } else if (!strcmp(cmd, "defaults")) {
     restoreDefaults();
@@ -782,14 +782,14 @@ void setup() {
   Serial.begin(115200);
 #endif
   ui::begin();
-  ui::drawSplash(buildinfo::stamp());
+  ui::drawSplash(buildinfo::stamp(), buildinfo::commit());
   splashUntil = millis() + cfg::SPLASH_MS;
   loadSettings();  // ボードの判別 (Cardputer / ADV) が要るので ui::begin (M5.begin) の後
   bool ok = engine::begin();
   uint8_t mac[6];
   net::ownMac(mac);
-  Serial.printf("MorseComm start (%s%s): MAC %02X:%02X:%02X:%02X:%02X:%02X radio=%s %s build=%s\r\n", board::NAME, hw::hasPhoneJack() ? " ADV" : "", mac[0], mac[1],
-                mac[2], mac[3], mac[4], mac[5], radioName(net::radio()), ok ? "ok" : "FAILED", buildinfo::stamp());
+  Serial.printf("MorseComm start (%s%s): MAC %02X:%02X:%02X:%02X:%02X:%02X radio=%s %s build=%s commit=%s\r\n", board::NAME, hw::hasPhoneJack() ? " ADV" : "", mac[0], mac[1],
+                mac[2], mac[3], mac[4], mac[5], radioName(net::radio()), ok ? "ok" : "FAILED", buildinfo::stamp(), buildinfo::commit());
   printSettings();
 }
 

@@ -206,17 +206,18 @@ void begin() {
 
 void sleepDisplay() { hw::displaySleep(); }
 
-void drawSplash(const char* buildStamp) {
+void drawSplash(const char* buildStamp, const char* commit) {
   canvas.fillScreen(COL_BG);
   canvas.setTextDatum(textdatum_t::middle_center);
   canvas.setFont(&fonts::Font4);
   canvas.setTextSize(1);
   canvas.setTextColor(TFT_WHITE, COL_BG);
-  canvas.drawString("MorseComm", W / 2, H / 2 - 10);
+  canvas.drawString("MorseComm", W / 2, H / 2 - 18);
   useLabelFont();
   canvas.setTextDatum(textdatum_t::middle_center);
   canvas.setTextColor(COL_LABEL, COL_BG);
-  canvas.drawString(buildStamp, W / 2, H / 2 + 18);
+  canvas.drawString(buildStamp, W / 2, H / 2 + 10);
+  canvas.drawString(commit, W / 2, H / 2 + 28);
   canvas.setTextDatum(textdatum_t::top_left);
   present();
 }

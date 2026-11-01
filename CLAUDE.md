@@ -423,6 +423,11 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     (arduino-cli は変わっていないソースを再コンパイルしないため、1 ファイルの __DATE__/__TIME__ では古くなる)。
     **ソースファイルを追加したら BUILD_INFO_UNIT() を書くこと**。シリアルの起動メッセージ (build=) と show にも出す。
     スプラッシュ中も送受信・入力は動いており、メイン画面の描画だけを待つ。Cardputer / ADV で画面とシリアルをユーザーが確認済み
+16. (2026-11-01) スプラッシュと show に git のコミットハッシュ (7 桁、未コミットの変更があれば末尾 "+") を追加。
+    arduino-cli にはビルド時にコマンドを走らせる仕組みが無いので、**ビルドの前に `tools/update-git-version.sh` を実行**して
+    git_version.h (git に入れない、.gitignore) を作る。無ければ "unknown"。内容が変わったときだけ書き換える。
+    git のフック (post-commit 等で自動生成) は、自動モードの安全チェックで「永続的な設定」として拒否されたので入れていない。
+    使うかどうかはユーザーの判断 (使うなら tools/githooks を作って `git config core.hooksPath tools/githooks`)
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
@@ -511,6 +516,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   StickS3 と Nesso の ESP-NOW での相互通信はユーザーが確認済み
 
 ### 実機テストの手順 (再開時に使う)
+- ビルドの前に `tools/update-git-version.sh` (コミットハッシュを git_version.h に書く)
 - **書き込みは sketch.yaml のプロファイルを使う** (2026-11-01 ユーザー要望で作成。プロファイル: nesson1 / sticks3 /
   stickcplus2 / stickcplus / cardputer。ボードパッケージ・ライブラリのバージョンとボードのオプションを固定してある):
   `arduino-cli compile --profile <名前> --build-path build/<名前> -u -p PORT .` (全プロファイルのビルドと cardputer の

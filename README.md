@@ -65,7 +65,12 @@ M5Stack Cardputer (初代) と Cardputer ADV は次のとおりです。**同じ
 同じフォルダから複数の機種をビルドするので、**機種ごとに別のビルドディレクトリ** (`--build-path`) を指定します
 (同じにすると、別の機種向けのファイルを書き込もうとして失敗します)。
 
+起動画面に git のコミットハッシュを出すため、ビルドの前に `tools/update-git-version.sh` を実行します
+(`git_version.h` を作ります。実行しなかった場合や git の外では `unknown` と表示されます)。
+
 ```sh
+# コミットハッシュを git_version.h に書く
+tools/update-git-version.sh
 # ビルドして書き込む (例: Cardputer)
 arduino-cli compile --profile cardputer --build-path build/cardputer -u -p /dev/cu.usbmodemXXXX .
 # ビルドだけ
@@ -79,8 +84,10 @@ arduino-cli compile --profile nesson1 --build-path build/nesson1 .
 ### 起動画面
 
 電源を入れたとき・リセットしたときは、3 秒間スプラッシュスクリーンを表示します。中央に `MorseComm`、その下にビルド日時
-(`20261101123734` のような年月日時分秒) が出るので、どの本体にどのビルドが入っているかを確かめられます。
-同じビルド日時はシリアルの起動メッセージ (`build=...`) と `show` にも出ます。
+(`20261101123734` のような年月日時分秒) と git のコミットハッシュ (`0820299` など。コミットしていない変更を含むビルドは
+末尾に `+`) が出るので、どの本体にどのビルドが入っているかを確かめられます。
+ビルド日時は機種ごとにビルドした時刻なので、同じソースでも機種によって違います。ソースが同じかどうかはコミットハッシュで比べます。
+同じ情報はシリアルの起動メッセージ (`build=... commit=...`) と `show` にも出ます。
 
 ### メイン画面
 

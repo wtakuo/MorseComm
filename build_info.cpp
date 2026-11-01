@@ -1,4 +1,10 @@
 #include "build_info.h"
+#if __has_include("git_version.h")
+#include "git_version.h"  // tools/update-git-version.sh が生成する (git には入れない)
+#endif
+#ifndef GIT_COMMIT
+#define GIT_COMMIT "unknown"
+#endif
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -30,6 +36,8 @@ void note(const char* date, const char* time) {
   uint64_t v = ((((uint64_t)year * 100 + month) * 100 + day) * 100 + hh) * 10000 + mm * 100 + ss;
   if (v > latest()) latest() = v;
 }
+
+const char* commit() { return GIT_COMMIT; }
 
 const char* stamp() {
   static char buf[16];

@@ -10,6 +10,9 @@ namespace buildinfo {
 
 void note(const char* date, const char* time);  // __DATE__ ("Nov  1 2026"), __TIME__ ("12:34:22")
 const char* stamp();                             // 最新のコンパイル日時 "20261101123422"
+// git のコミットハッシュ (7 桁。未コミットの変更があれば末尾に "+")。ビルド前に tools/update-git-version.sh が
+// git_version.h に書く。git_version.h が無ければ "unknown"
+const char* commit();
 
 struct Unit {
   Unit(const char* date, const char* time) { note(date, time); }
