@@ -290,7 +290,10 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - キー: Grove の G33 (白, ボード定義の SCL) = ストレート/DIT, G32 (黄, SDA) = DAH (ユーザー確認済み。StickS3 と同じ SCL/SDA 位置)
   - USB シリアルは CH9102 (USB-UART, /dev/cu.usbserial-*)。HWCDC と違い setTxTimeoutMs が無く、送信バッファは begin の前に
     設定する (ARDUINO_USB_CDC_ON_BOOT で分岐)。**macOS では USB-UART のポートを閉じると設定が 9600bps に戻る**ので、
-    tools/ser.sh は開いた fd に対して stty する。ポートを開いてもリセットはされなかった
+    tools/ser.sh は開いた fd に対して stty する。**ポートを開くと本体が再起動する** (2026-11-01 に確認。
+    以前は再起動しないように見えた) ので、ser.sh は usbserial のポートでは 2.5 秒待ってからコマンドを送る
+  - 2 台目の Plus2 (MAC [Plus2-B], /dev/cu.usbserial-XXXX) も追加。1 台目は [Plus2-A]
+    (/dev/cu.usbserial-XXXX)。2 台の Plus2 間でも PARIS 20WPM の再現・デコードを確認
   - 実機: Plus2 ⇔ StickS3 の ESP-NOW 双方向で PARIS 20WPM / CQ TEST 30WPM の DOWN/UP 長を再現 (±1ms)、デコード誤りなし
   - ユーザー確認済み (2026-10-31): 画面の向き・表示、サイドトーン・受信トーン、ボタンの役割 (他機種と同じ)、
     電池で 3 分後のスリープとボタンでの復帰。Grove へのキー・パドル接続 (G33/G32) も 2026-11-01 にユーザーが確認済み
