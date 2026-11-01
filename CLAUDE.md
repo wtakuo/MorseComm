@@ -387,6 +387,9 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     restoreDefaults() (Preferences の名前空間 "morse" を clear して shared.h の Settings() 既定値を保存)。
     タッチの押し続け (TouchEvent::repeat) では実行しない。既定値はユーザー指定: ESP-NOW, CH1, IAMBIC_B, NORMAL, 20WPM,
     SIDETONE ON, VOL 3, 700Hz / 600Hz。シリアルは `defaults` (確認なし、無線が変われば再起動)
+    ユーザーが Nesso で DEFAULTS (2 回押しでの実行・1 回押し後 3 秒での取り消し) と `defaults` コマンドを確認済み (2026-11-01)。
+    注意: loop() の `now` はループ先頭の時刻なので、ループ途中で millis() で記録した時刻との差は符号付きで比べること
+    (符号無しだと負の差が巨大な値になる。DEFAULTS が押した直後に取り消される不具合の原因だった)
     8 項目は画面 (7 行) に収まらないので、選択中の項目が見えるようにスクロールする (ui.cpp の listTop)
   - RADIO: Nesso は ESP-NOW → LoRa → OFF、StickS3 / StickC Plus2 は ESP-NOW ↔ OFF。動作中と違う値には " *" を付け、
     設定画面を抜けたときに保存して再起動する (MorseComm.ino の restartIfRadioChanged)
