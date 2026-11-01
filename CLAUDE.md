@@ -357,8 +357,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 10. (2026-11-01) 設定を既定値に戻す DEFAULTS 項目と `defaults` コマンド、help の term の説明を短縮 (80 桁以内)
 
 ### 現在の状態 (2026-11-01)
-- 3 機種 (Nesso N1 / M5StickS3 / M5StickC Plus2) すべて、ユーザーが実機で動作確認済み。未コミットの変更なし
-- ユーザーから依頼されて未完了の作業はない。予定は下の「次にやること」のみ
+- 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
+- 次の作業: M5StickC Plus (Plus2 ではない旧モデル, AXP192 あり) への移植 (2026-11-01 ユーザー依頼, 2 台)
 
 ### 次にやること (ユーザー予定)
 - LoRa を距離のある場所で試験する (ユーザーが後日実施)。結果 (最上段の dBm / L / R / W、デコードの具合) を聞いて、
@@ -424,8 +424,9 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   sleep / help (README に一覧)。`stats` の `|` 以降は送信側 (無線の種類, sent, csBusy, air など)
 - 設定は Preferences (名前空間 "morse") に保存。キー: mode wpm sideon sidehz rxhz vol swap ch radio、
   ジッタ遅延は無線ごとに jitter (ESP-NOW, 既定 150) / ljitter (LoRa, 既定 250)。
-  実機 (2026-10-31 の状態): Nesso 2 台 = STRAIGHT / IAMBIC_B・ESP-NOW、StickS3 = STRAIGHT・RADIO OFF (ユーザー設定)、
-  StickC Plus2 = IAMBIC_B・ESP-NOW (ポート番号は接続のたびに変わる)
+  実機 (2026-11-01 の状態): いずれも ESP-NOW・CH1。Nesso 101 = IAMBIC_B, Nesso 1101 = STRAIGHT, StickS3 = IAMBIC_B,
+  Plus2 ([Plus2-A]) = IAMBIC_B 22WPM, Plus2 ([Plus2-B]) = IAMBIC_B 20WPM。設定はユーザーがよく変えるので、試験前に `show` で
+  記録し、試験で変えたら元に戻すこと (ポート番号は接続のたびに変わる)
 - M5StickS3 対応 (2026-10-30): 上記の機能はすべて共通。設定画面はタッチが無いので選択/変更モード
   (選択: A=次, B=変更開始, 長押し=終了 / 変更: A=+, B=-, 長押し=選択へ戻る)。
   ユーザーが StickS3 の設定画面で RADIO を切り替えて OFF モードを確認済み。StickS3 ⇔ Nesso の ESP-NOW 通信も確認済み
