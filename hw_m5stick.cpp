@@ -75,6 +75,14 @@ void displaySleep() {
   M5.Display.sleep();
 }
 
+bool hasPhoneJack() {
+#if defined(BOARD_CARDPUTER)
+  return M5.getBoard() == m5::board_t::board_M5CardputerADV;  // 初代と ADV は同じビルドで、M5Unified が起動時に判別する
+#else
+  return false;
+#endif
+}
+
 void lockBus() {}
 void unlockBus() {}
 

@@ -13,7 +13,9 @@ struct Settings {
   uint8_t sideOn = 1;  // サイドトーン ON/OFF
   uint16_t sideHz = cfg::SIDE_HZ_DEFAULT;
   uint16_t rxHz = cfg::RX_HZ_DEFAULT;
-  uint8_t volume = cfg::VOLUME_DEFAULT;
+  uint8_t volume = cfg::VOLUME_DEFAULT;      // スピーカーの音量
+  uint8_t output = cfg::OUTPUT_SPEAKER;      // 音の出口 (Cardputer ADV のみ意味がある)
+  uint8_t hpVolume = cfg::HP_VOLUME_DEFAULT;  // ヘッドフォンの音量
   uint8_t swap = 0;  // パドルの DIT/DAH 入れ替え
   uint16_t jitterMs = cfg::JITTER_DELAY_MS;
   uint8_t channel = cfg::CH_DEFAULT;  // 通信チャンネル

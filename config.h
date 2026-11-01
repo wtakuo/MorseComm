@@ -22,6 +22,10 @@ constexpr int TONE_HZ_MIN = 300;
 constexpr int TONE_HZ_MAX = 1500;
 constexpr int TONE_STEP_HZ = 50;
 constexpr int VOLUME_DEFAULT = 3;
+// 音の出口 (ヘッドフォン端子のある Cardputer ADV)。音量は出口ごとに別に持つ
+constexpr uint8_t OUTPUT_SPEAKER = 0;
+constexpr uint8_t OUTPUT_PHONES = 1;
+constexpr int HP_VOLUME_DEFAULT = 2;
 constexpr uint32_t TONE_PREVIEW_MS = 150;  // 設定変更時の試聴音の長さ
 
 // ---- 設定画面 ----

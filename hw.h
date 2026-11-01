@@ -42,5 +42,7 @@ enum : int {
 };
 bool hasKeyboard();
 int readKey();
+// ヘッドフォン端子がある (Cardputer ADV)。差すとハードウェアでスピーカーが止まるが、差したことは検出できない
+bool hasPhoneJack();
 
 }  // namespace hw

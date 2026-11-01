@@ -110,6 +110,8 @@ Settings clampSettings(Settings s) {
   clampHz(s.rxHz);
   s.sideOn = s.sideOn ? 1 : 0;
   if (s.volume > ToneOut::VOLUME_MAX) s.volume = ToneOut::VOLUME_MAX;
+  if (s.hpVolume > ToneOut::VOLUME_MAX) s.hpVolume = ToneOut::VOLUME_MAX;
+  if (s.output != cfg::OUTPUT_PHONES || !hw::hasPhoneJack()) s.output = cfg::OUTPUT_SPEAKER;
   if (s.jitterMs > 1000) s.jitterMs = 1000;
   if (s.channel < cfg::CH_MIN || s.channel > cfg::CH_MAX) s.channel = cfg::CH_DEFAULT;
   s.swap = s.swap ? 1 : 0;
@@ -141,6 +143,8 @@ void loadSettings() {
   s.sideHz = prefs.getUShort("sidehz", s.sideHz);
   s.rxHz = prefs.getUShort("rxhz", s.rxHz);
   s.volume = prefs.getUChar("vol", s.volume);
+  s.hpVolume = prefs.getUChar("hpvol", s.hpVolume);
+  s.output = prefs.getUChar("out", s.output);
   s.swap = prefs.getUChar("swap", s.swap);
   s.channel = prefs.getUChar("ch", s.channel);
   s.radio = prefs.getUChar("radio", s.radio);
@@ -162,6 +166,8 @@ void saveSettings() {
   prefs.putUShort("sidehz", s.sideHz);
   prefs.putUShort("rxhz", s.rxHz);
   prefs.putUChar("vol", s.volume);
+  prefs.putUChar("hpvol", s.hpVolume);
+  prefs.putUChar("out", s.output);
   prefs.putUChar("swap", s.swap);
   prefs.putUShort(jitterKey(s.radio), s.jitterMs);
   prefs.putUChar("ch", s.channel);
@@ -204,6 +210,9 @@ void printSettings() {
       "log=%u\r\n",
       radioName(s.radio), s.channel, cw::keyModeName((cw::KeyMode)s.mode), s.wpm, s.sideOn ? "on" : "off", s.sideHz,
       s.rxHz, s.volume, s.swap, s.jitterMs, c.testOn ? "on" : "off", c.testText, c.lossPct, c.dropUp, g_logOn);
+  if (hw::hasPhoneJack())
+    Serial.printf("output=%s speaker vol=%u phones vol=%u\r\n", s.output == cfg::OUTPUT_PHONES ? "phones" : "speaker",
+                  s.volume, s.hpVolume);
 }
 
 void printStats() {
@@ -238,7 +247,8 @@ void printHelp() {
       {"side N", "sidetone frequency (Hz)"},
       {"side on|off", "sidetone on / off"},
       {"rxtone N", "receive tone frequency (Hz)"},
-      {"vol N", "volume (0-5)"},
+      {"vol N", "volume (0-5) of the current output"},
+      {"output speaker|phones", "sound output (Cardputer ADV only)"},
       {"jitter N", "jitter buffer delay (ms)"},
       {"term", "terminal mode: type to send"},
       {"test on [TEXT]", "send TEXT repeatedly at the current WPM"},
@@ -425,7 +435,15 @@ void handleCommand(char* line) {
   } else if (!strcmp(cmd, "rxtone") && arg) {
     editSettings([&](Settings& s) { s.rxHz = n; });
   } else if (!strcmp(cmd, "vol") && arg) {
-    editSettings([&](Settings& s) { s.volume = n; });
+    // 今の出口 (スピーカー / ヘッドフォン) の音量
+    editSettings([&](Settings& s) { (s.output == cfg::OUTPUT_PHONES ? s.hpVolume : s.volume) = n; });
+  } else if (!strcmp(cmd, "output") && arg) {
+    int o = !strcasecmp(arg, "speaker") ? cfg::OUTPUT_SPEAKER : !strcasecmp(arg, "phones") ? cfg::OUTPUT_PHONES : -1;
+    if (o < 0 || !hw::hasPhoneJack()) {
+      Serial.print(o < 0 ? "unknown output\r\n" : "no headphone jack on this board\r\n");
+      return;
+    }
+    editSettings([&](Settings& s) { s.output = o; });
   } else if (!strcmp(cmd, "swap") && arg) {
     editSettings([&](Settings& s) { s.swap = n; });
   } else if (!strcmp(cmd, "ch") && arg) {
@@ -562,9 +580,12 @@ void adjustSelected(int dir) {
       case ui::Item::SideOn: s.sideOn = !s.sideOn; break;
       case ui::Item::SideHz: s.sideHz += dir * cfg::TONE_STEP_HZ; break;
       case ui::Item::RxHz: s.rxHz += dir * cfg::TONE_STEP_HZ; break;
-      case ui::Item::Volume:
-        if ((dir > 0 && s.volume < ToneOut::VOLUME_MAX) || (dir < 0 && s.volume > 0)) s.volume += dir;
+      case ui::Item::Volume: {  // 今の出口 (スピーカー / ヘッドフォン) の音量
+        uint8_t& v = s.output == cfg::OUTPUT_PHONES ? s.hpVolume : s.volume;
+        if ((dir > 0 && v < ToneOut::VOLUME_MAX) || (dir < 0 && v > 0)) v += dir;
         break;
+      }
+      case ui::Item::Output: s.output = s.output == cfg::OUTPUT_PHONES ? cfg::OUTPUT_SPEAKER : cfg::OUTPUT_PHONES; break;
       case ui::Item::Swap: s.swap = !s.swap; break;
       default: break;
     }
@@ -594,15 +615,14 @@ void enterSettings(bool on, uint32_t now) {
 // 設定画面:   ↑ / ↓ (fn なしの ; . でもよい) = 項目の選択、← / → (, /) = 値を減らす / 増やす、
 //             Enter (OK) = 値を進める (DEFAULTS は 2 回で実行)、esc / ` = 設定画面を抜ける (保存)
 void handleKey(int k, uint32_t now) {
-  const int count = ui::itemCount();
   lastInputMs = now;
   lastSettingsOpMs = now;
   lastUiMs = 0;
   bool esc = k == hw::KEY_ESC || k == '`';
   if (settingsScreen) {
     if (esc) enterSettings(false, now);
-    else if (k == hw::KEY_UP || k == ';') selected = (ui::Item)(((int)selected + count - 1) % count);
-    else if (k == hw::KEY_DOWN || k == '.') selected = (ui::Item)(((int)selected + 1) % count);
+    else if (k == hw::KEY_UP || k == ';') selected = ui::stepItem(selected, -1);
+    else if (k == hw::KEY_DOWN || k == '.') selected = ui::stepItem(selected, +1);
     else if (k == hw::KEY_LEFT || k == ',') adjustSelected(-1);
     else if (k == hw::KEY_RIGHT || k == '/' || k == hw::KEY_ENTER) adjustSelected(+1);
     return;
@@ -631,7 +651,6 @@ void handleKey(int k, uint32_t now) {
 }
 
 void pollInput(uint32_t now) {
-  const int count = ui::itemCount();
   for (int k; (k = hw::readKey()) != hw::KEY_NONE;) handleKey(k, now);
   ui::Button b = ui::pollButtons(now);
   ui::TouchEvent t = ui::pollTouch(settingsScreen);
@@ -676,21 +695,21 @@ void pollInput(uint32_t now) {
       else if (b == ui::Button::Key2Short) adjustSelected(-1);
       else if (longPress) editing = false;
     } else {
-      if (b == ui::Button::Key1Short) selected = (ui::Item)(((int)selected + 1) % count);
+      if (b == ui::Button::Key1Short) selected = ui::stepItem(selected, +1);
       else if (b == ui::Button::Key2Short) editing = true;
       else if (longPress) enterSettings(false, now);
     }
     return;
   }
   switch (b) {
-    case ui::Button::Key1Short: selected = (ui::Item)(((int)selected + 1) % count); break;
-    case ui::Button::Key2Short: selected = (ui::Item)(((int)selected + count - 1) % count); break;
+    case ui::Button::Key1Short: selected = ui::stepItem(selected, +1); break;
+    case ui::Button::Key2Short: selected = ui::stepItem(selected, -1); break;
     case ui::Button::Key1Long:
     case ui::Button::Key2Long: enterSettings(false, now); return;
     default: break;
   }
   switch (t.kind) {
-    case ui::TouchEvent::Row: selected = (ui::Item)t.row; break;
+    case ui::TouchEvent::Row: selected = ui::itemAt(t.row); break;
     // DEFAULTS は押し続けの連続イベントでは実行しない (誤って既定値に戻さないため)
     case ui::TouchEvent::Plus:
       if (!(t.repeat && selected == ui::Item::Defaults)) adjustSelected(+1);
@@ -758,12 +777,12 @@ void setup() {
   Serial.setTxBufferSize(SERIAL_TX_BUFFER);
   Serial.begin(115200);
 #endif
-  loadSettings();
   ui::begin();
+  loadSettings();  // ボードの判別 (Cardputer / ADV) が要るので ui::begin (M5.begin) の後
   bool ok = engine::begin();
   uint8_t mac[6];
   net::ownMac(mac);
-  Serial.printf("MorseComm start (%s): MAC %02X:%02X:%02X:%02X:%02X:%02X radio=%s %s\r\n", board::NAME, mac[0], mac[1],
+  Serial.printf("MorseComm start (%s%s): MAC %02X:%02X:%02X:%02X:%02X:%02X radio=%s %s\r\n", board::NAME, hw::hasPhoneJack() ? " ADV" : "", mac[0], mac[1],
                 mac[2], mac[3], mac[4], mac[5], radioName(net::radio()), ok ? "ok" : "FAILED");
   printSettings();
 }

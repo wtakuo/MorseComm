@@ -85,7 +85,8 @@ void applySettings(uint32_t now, bool modeChanged) {
   iambic.setWpm(set.wpm);
   streamKeyer.setWpm(set.wpm);
   iambic.setModeB(set.mode == (uint8_t)cw::KeyMode::IambicB);
-  toneOut.setVolume(set.volume);
+  toneOut.setVolume(set.output == cfg::OUTPUT_PHONES ? set.hpVolume : set.volume);
+  toneOut.setPhones(set.output == cfg::OUTPUT_PHONES);
   peers.setDelay(set.jitterMs);
   if (modeChanged) {
     iambic.reset();
@@ -120,7 +121,8 @@ void syncShared(uint32_t now) {
     }
     // 音に関わる設定を変えたら、その音を短く鳴らして確認できるようにする
     if (set.sideHz != oldSet.sideHz || (set.sideOn && !oldSet.sideOn)) preview(set.sideHz, now);
-    else if (set.rxHz != oldSet.rxHz || set.volume != oldSet.volume) preview(set.rxHz, now);
+    else if (set.rxHz != oldSet.rxHz || set.volume != oldSet.volume ||
+             set.hpVolume != oldSet.hpVolume || set.output != oldSet.output) preview(set.rxHz, now);
   }
   if (!cChanged) return;
   net::setLossInjection(ctl.lossPct, ctl.dropUp);

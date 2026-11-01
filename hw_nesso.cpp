@@ -72,6 +72,8 @@ void displaySleep() {
   unlockBus();
 }
 
+bool hasPhoneJack() { return false; }
+
 void lockBus() {
   if (busMutex) xSemaphoreTake(busMutex, portMAX_DELAY);
 }

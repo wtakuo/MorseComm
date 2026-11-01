@@ -14,8 +14,14 @@ class ToneOut {
   // 音量 0..VOLUME_MAX (0 は消音)
   void setVolume(int vol);
   static constexpr int VOLUME_MAX = 5;
+  // ヘッドフォン向けの小さい音量段階にする (Cardputer ADV。ほかのボードでは音量の段階は変わらない)
+  void setPhones(bool phones) {
+    phones_ = phones;
+    setVolume(vol_);
+  }
 
  private:
+  bool phones_ = false;
   int vol_ = 3;
   int hz_ = 0;
   bool on_ = false;

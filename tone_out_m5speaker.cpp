@@ -11,8 +11,9 @@ constexpr size_t DMA_BUF_LEN = 64;    // サンプル数
 constexpr size_t DMA_BUF_COUNT = 4;   // → 64 x 4 / 22050Hz ≒ 12ms
 constexpr uint8_t SPK_TASK_PRIORITY = 10;
 constexpr int CHANNEL = 0;
-// 音量段階ごとの M5.Speaker の音量 (0..255)
+// 音量段階ごとの M5.Speaker の音量 (0..255)。ヘッドフォンはスピーカーよりずっと小さい音で足りる
 constexpr uint8_t VOLUME[ToneOut::VOLUME_MAX + 1] = {0, 24, 56, 100, 160, 255};
+constexpr uint8_t VOLUME_PHONES[ToneOut::VOLUME_MAX + 1] = {0, 3, 6, 12, 24, 48};
 }  // namespace
 
 bool ToneOut::begin(int hz) {
@@ -23,7 +24,7 @@ bool ToneOut::begin(int hz) {
   sc.task_priority = SPK_TASK_PRIORITY;
   M5.Speaker.config(sc);
   ready_ = M5.Speaker.begin();
-  M5.Speaker.setVolume(VOLUME[vol_]);
+  M5.Speaker.setVolume((phones_ ? VOLUME_PHONES : VOLUME)[vol_]);
   return ready_;
 }
 
@@ -48,6 +49,6 @@ void ToneOut::setVolume(int vol) {
   if (vol < 0) vol = 0;
   if (vol > VOLUME_MAX) vol = VOLUME_MAX;
   vol_ = vol;
-  if (ready_) M5.Speaker.setVolume(VOLUME[vol_]);
+  if (ready_) M5.Speaker.setVolume((phones_ ? VOLUME_PHONES : VOLUME)[vol_]);
 }
 #endif

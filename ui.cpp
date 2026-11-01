@@ -136,6 +136,7 @@ const char* itemLabel(Item it) {
     case Item::Swap: return "PADDLE";
     case Item::Radio: return "RADIO";
     case Item::Defaults: return "DEFAULTS";
+    case Item::Output: return "OUTPUT";
     default: return "";
   }
 }
@@ -153,7 +154,10 @@ void itemValue(const Settings& s, Item it, char* buf, size_t n) {
                : defaultsState == DefaultsState::Done ? "RESTORED"
                                                       : "RESTORE");
       break;
-    case Item::Volume: snprintf(buf, n, "%u / %d", s.volume, 5); break;
+    case Item::Volume:  // 今の出口 (スピーカー / ヘッドフォン) の音量
+      snprintf(buf, n, "%u / %d", s.output == cfg::OUTPUT_PHONES ? s.hpVolume : s.volume, 5);
+      break;
+    case Item::Output: snprintf(buf, n, "%s", s.output == cfg::OUTPUT_PHONES ? "PHONES" : "SPEAKER"); break;
     case Item::Swap: snprintf(buf, n, "%s", s.swap ? "SWAPPED" : "NORMAL"); break;
     case Item::Radio:
       // 動作中と違う場合は、設定画面を抜けると再起動して切り替わる
@@ -254,7 +258,7 @@ TouchEvent pollTouch(bool settingsScreen) {
   }
   ev.kind = kind;
   if (kind == TouchEvent::Row) {
-    int row = listTop + (ev.y - ROW_Y0) / ROW_H;
+    int row = listTop + (ev.y - ROW_Y0) / ROW_H;  // 表示順の index (itemAt で項目にする)
     if (ev.y < ROW_Y0 || row >= itemCount()) ev.kind = TouchEvent::None;
     ev.row = row;
   }
@@ -263,7 +267,30 @@ TouchEvent pollTouch(bool settingsScreen) {
 
 bool touchAvailable() { return hw::hasTouch(); }
 
-int itemCount() { return (int)Item::Count; }
+bool itemShown(Item it) { return it != Item::Output || hw::hasPhoneJack(); }
+
+int itemCount() {
+  int n = 0;
+  for (int i = 0; i < (int)Item::Count; i++) n += itemShown((Item)i);
+  return n;
+}
+
+Item itemAt(int index) {
+  for (int i = 0; i < (int)Item::Count; i++)
+    if (itemShown((Item)i) && index-- == 0) return (Item)i;
+  return Item::Radio;
+}
+
+int itemIndex(Item it) {
+  int n = 0;
+  for (int i = 0; i < (int)it; i++) n += itemShown((Item)i);
+  return n;
+}
+
+Item stepItem(Item it, int dir) {
+  int n = itemCount();
+  return itemAt((itemIndex(it) + n + dir) % n);
+}
 
 Battery readBattery() { return hw::battery(); }
 
@@ -390,11 +417,12 @@ void drawSettings(const Settings& s, Item selected, bool editing, const Battery&
 
   // 選択中の項目が見えるようにスクロールする
   int count = itemCount();
-  if ((int)selected < listTop) listTop = (int)selected;
-  if ((int)selected >= listTop + VISIBLE_ROWS) listTop = (int)selected - VISIBLE_ROWS + 1;
+  int sel = itemIndex(selected);
+  if (sel < listTop) listTop = sel;
+  if (sel >= listTop + VISIBLE_ROWS) listTop = sel - VISIBLE_ROWS + 1;
   if (listTop > count - VISIBLE_ROWS) listTop = count > VISIBLE_ROWS ? count - VISIBLE_ROWS : 0;
   for (int i = listTop; i < count && i < listTop + VISIBLE_ROWS; i++) {
-    Item it = (Item)i;
+    Item it = itemAt(i);
     int y = ROW_Y0 + (i - listTop) * ROW_H;
     bool sel = it == selected;
     uint16_t bg = !sel ? COL_BG : editing ? COL_EDIT : COL_SEL;

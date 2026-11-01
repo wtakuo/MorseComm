@@ -7,14 +7,18 @@
 
 namespace ui {
 
-// 設定画面の項目 (項目数は itemCount() を使うこと)
-// 並び順がそのまま画面の表示順 (2026-11-01 ユーザー指定)
+// 設定画面の項目。並び順がそのまま画面の表示順 (2026-11-01 ユーザー指定)
+// Output = 音の出口 (スピーカー / ヘッドフォン。ヘッドフォン端子のある Cardputer ADV だけに出す)
 // Defaults = すべての設定を既定値に戻す (2 回押して実行)
-enum class Item : uint8_t { Radio, Mode, Swap, Wpm, SideOn, Volume, SideHz, RxHz, Defaults, Count };
+enum class Item : uint8_t { Radio, Mode, Swap, Wpm, SideOn, Output, Volume, SideHz, RxHz, Defaults, Count };
 
 // DEFAULTS 項目の表示状態: 未操作 / 1 回押した (もう 1 回で実行) / 実行した
 enum class DefaultsState : uint8_t { Idle, Armed, Done };
+// このボードで表示する項目の数と、表示順の index ⇔ 項目の変換。項目の移動は stepItem を使うこと
 int itemCount();
+Item itemAt(int index);
+int itemIndex(Item it);
+Item stepItem(Item it, int dir);
 
 enum class Button : uint8_t { None, Key1Short, Key1Long, Key2Short, Key2Long };
 
