@@ -428,7 +428,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     git_version.h (git に入れない、.gitignore) を作る。無ければ "unknown"。内容が変わったときだけ書き換える。
     git のフック: tools/githooks/ (post-commit / post-checkout / post-merge / post-rewrite) がこのスクリプトを呼ぶ
     (ユーザー依頼で作成)。有効にするには `git config core.hooksPath tools/githooks` (クローンごとに 1 回)。
-    この設定は自動モードの安全チェックで「永続的な設定」として Claude からは拒否されるので、ユーザーが実行する
+    この設定は自動モードの安全チェックで「永続的な設定」として Claude からは拒否されるので、ユーザーが実行する。
+    このクローンではユーザーが設定済み (2026-11-01)。コミットのたびに git_version.h が自動で更新される
     StickS3 でスプラッシュのコミットハッシュ表示をユーザーが確認済み
 
 ### 現在の状態 (2026-11-01)
