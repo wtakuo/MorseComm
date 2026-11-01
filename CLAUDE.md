@@ -351,6 +351,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 8. M5StickC Plus2 対応 (2026-10-31, §10)。hw_sticks3.cpp → hw_m5stick.cpp、tone_out_nesso.cpp → tone_out_buzzer.cpp に共通化。
    2026-11-01 にキー・パドル接続を含めてユーザーが全項目を確認済み
 9. (2026-11-01) 設定画面の順番変更、シリアルの CR LF・プロンプト・エコーバック・help の 1 行 1 コマンド化
+10. (2026-11-01) 設定を既定値に戻す DEFAULTS 項目と `defaults` コマンド、help の term の説明を短縮 (80 桁以内)
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 / M5StickS3 / M5StickC Plus2) すべて、ユーザーが実機で動作確認済み。未コミットの変更なし
@@ -380,8 +381,12 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - 最上段: [CHn] x局数(2局以上) dBm L% R W ... 電池
   - 設定画面: KEY2 短押しで入る。項目はタッチまたは KEY1(次)/KEY2(前) で選び、右側のタッチ [+]/[-] で変更
     (押し続けで連続)。KEY1/KEY2 長押し または 30 秒無操作で抜けて保存。
-    項目 (表示順, 2026-11-01 ユーザー指定): RADIO / MODE / PADDLE / SPEED / SIDETONE / VOLUME / SIDE FREQ / RX FREQ
-    (ui.h の enum Item の並び = 表示順。チャンネルは設定画面に無い)。
+    項目 (表示順, 2026-11-01 ユーザー指定): RADIO / MODE / PADDLE / SPEED / SIDETONE / VOLUME / SIDE FREQ / RX FREQ /
+    DEFAULTS (ui.h の enum Item の並び = 表示順。チャンネルは設定画面に無い)。
+    DEFAULTS (2026-11-01 ユーザー要望): +/- を 1 回押すと "PRESS AGAIN"、3 秒 (DEFAULTS_CONFIRM_MS) 以内の 2 回目で
+    restoreDefaults() (Preferences の名前空間 "morse" を clear して shared.h の Settings() 既定値を保存)。
+    タッチの押し続け (TouchEvent::repeat) では実行しない。既定値はユーザー指定: ESP-NOW, CH1, IAMBIC_B, NORMAL, 20WPM,
+    SIDETONE ON, VOL 3, 700Hz / 600Hz。シリアルは `defaults` (確認なし、無線が変われば再起動)
     8 項目は画面 (7 行) に収まらないので、選択中の項目が見えるようにスクロールする (ui.cpp の listTop)
   - RADIO: Nesso は ESP-NOW → LoRa → OFF、StickS3 / StickC Plus2 は ESP-NOW ↔ OFF。動作中と違う値には " *" を付け、
     設定画面を抜けたときに保存して再起動する (MorseComm.ino の restartIfRadioChanged)
@@ -407,7 +412,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   送信中はキー・パドル無視。エコーは即時、行頭 "> " (打った文字) / "< " (受信)。BS は未送信分だけ取り消し、
   符号の無い文字は BEL。Ctrl-C / Ctrl-D で終了。端末モード中は log と "settings saved" を出さない。
   StickS3 (RADIO OFF) でエコー・BS・終了を確認。ユーザーが端末モードの動作を確認済み (2 台間の確認はまだ)
-- シリアルコマンド: ch N / radio espnow|lora|off / term / mode / wpm / side N|on|off / rxtone / vol / swap / jitter /
+- シリアルコマンド: ch N / radio espnow|lora|off / term / defaults / mode / wpm / side N|on|off / rxtone / vol / swap / jitter /
   test on [TEXT] (`[SK]` で文字間なし送信) / test off / loss N / dropup 0|1 / log 0|1 / stats / show / clear / save /
   sleep / help (README に一覧)。`stats` の `|` 以降は送信側 (無線の種類, sent, csBusy, air など)
 - 設定は Preferences (名前空間 "morse") に保存。キー: mode wpm sideon sidehz rxhz vol swap ch radio、

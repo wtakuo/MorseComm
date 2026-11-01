@@ -45,6 +45,8 @@ bool editing = false;  // タッチの無いボード: 選択中の項目の値�
 uint32_t lastSettingsOpMs = 0;
 ui::Battery battery;
 bool saveDirty = false;
+ui::DefaultsState defaultsState = ui::DefaultsState::Idle;  // 設定画面の DEFAULTS 項目
+uint32_t defaultsArmedMs = 0;
 uint32_t lastChangeMs = 0, lastUiMs = 0, lastBtnMs = 0, lastStatsMs = 0, lastBatteryMs = 0;
 uint32_t chOverlayUntil = 0;  // この時刻までチャンネル番号を大きく表示する
 uint32_t lastInputMs = 0;  // ボタン・タッチ・シリアル入力、USB 給電中
@@ -234,7 +236,7 @@ void printHelp() {
       {"rxtone N", "receive tone frequency (Hz)"},
       {"vol N", "volume (0-5)"},
       {"jitter N", "jitter buffer delay (ms)"},
-      {"term", "terminal mode: type to send, received text is shown (Ctrl-C to quit)"},
+      {"term", "terminal mode: type to send"},
       {"test on [TEXT]", "send TEXT repeatedly at the current WPM"},
       {"test off", "stop the test"},
       {"loss N", "drop N% of sent packets (test)"},
@@ -245,6 +247,7 @@ void printHelp() {
       {"clear", "clear the text on the screen"},
       {"save", "save settings now"},
       {"sleep", "go to sleep now"},
+      {"defaults", "restore all settings to defaults"},
       {"help", "show this help"},
   };
   Serial.print("commands:\r\n");
@@ -376,6 +379,21 @@ void handleTermChar(char ch) {
   else Serial.write(ch);
 }
 
+// すべての設定を既定値に戻す (保存済みの値も消す)。無線の種類が変わる場合は、
+// 設定画面ならそれを抜けたとき、シリアルコマンドならすぐに再起動して切り替える
+void restoreDefaults() {
+  prefs.begin("morse", false);
+  prefs.clear();
+  prefs.end();
+  lockShared();
+  g_settings = Settings();  // shared.h の既定値: ESP-NOW, CH1, IAMBIC_B, NORMAL, 20WPM, SIDETONE ON, VOL 3, 700/600Hz
+  g_settingsVer++;
+  unlockShared();
+  saveSettings();
+  asyncOut();
+  Serial.print("settings restored to defaults\r\n");
+}
+
 // ---- シリアルコマンド ----
 void handleCommand(char* line) {
   char* cmd = strtok(line, " \t");
@@ -452,6 +470,9 @@ void handleCommand(char* line) {
   } else if (!strcmp(cmd, "show")) {
     power::printStatus();
     Serial.printf("touch=%s\r\n", ui::touchAvailable() ? "ok" : "not found");
+  } else if (!strcmp(cmd, "defaults")) {
+    restoreDefaults();
+    restartIfRadioChanged();
   } else if (!strcmp(cmd, "clear")) {
     ui::clearText();
   } else if (!strcmp(cmd, "save")) {
@@ -518,6 +539,18 @@ void pollSerial() {
 //   選択中:    KEY1 短押し = 次の項目 / KEY2 短押し = 変更を始める / 長押し = 終了 (保存)
 //   変更中:    KEY1 短押し = + / KEY2 短押し = - / 長押し = 変更を終える
 void adjustSelected(int dir) {
+  if (selected == ui::Item::Defaults) {
+    // 1 回目で確認待ち、DEFAULTS_CONFIRM_MS 以内の 2 回目で実行
+    uint32_t now = millis();
+    if (defaultsState == ui::DefaultsState::Armed && now - defaultsArmedMs < cfg::DEFAULTS_CONFIRM_MS) {
+      restoreDefaults();
+      defaultsState = ui::DefaultsState::Done;
+    } else {
+      defaultsState = ui::DefaultsState::Armed;
+      defaultsArmedMs = now;
+    }
+    return;
+  }
   editSettings([&](Settings& s) {
     switch (selected) {
       case ui::Item::Mode: s.mode = (s.mode + cw::KEY_MODE_COUNT + dir) % cw::KEY_MODE_COUNT; break;
@@ -606,8 +639,13 @@ void pollInput(uint32_t now) {
   }
   switch (t.kind) {
     case ui::TouchEvent::Row: selected = (ui::Item)t.row; break;
-    case ui::TouchEvent::Plus: adjustSelected(+1); break;
-    case ui::TouchEvent::Minus: adjustSelected(-1); break;
+    // DEFAULTS は押し続けの連続イベントでは実行しない (誤って既定値に戻さないため)
+    case ui::TouchEvent::Plus:
+      if (!(t.repeat && selected == ui::Item::Defaults)) adjustSelected(+1);
+      break;
+    case ui::TouchEvent::Minus:
+      if (!(t.repeat && selected == ui::Item::Defaults)) adjustSelected(-1);
+      break;
     default: break;
   }
 }
@@ -702,7 +740,11 @@ void loop() {
     int32_t remain = sleepRemainingMs(now, sn);
     if (remain != -1 && remain <= 0) goToSleep();
     int sleepIn = (remain >= 0 && remain <= (int32_t)cfg::SLEEP_WARN_MS) ? (remain + 999) / 1000 : -1;
-    if (settingsScreen) ui::drawSettings(s, selected, editing, battery);
+    // DEFAULTS の確認待ちは、別の項目に移るか時間切れで取り消す
+    if (selected != ui::Item::Defaults || !settingsScreen ||
+        (defaultsState == ui::DefaultsState::Armed && now - defaultsArmedMs >= cfg::DEFAULTS_CONFIRM_MS))
+      defaultsState = ui::DefaultsState::Idle;
+    if (settingsScreen) ui::drawSettings(s, selected, editing, battery, defaultsState);
     else ui::drawMain(s, c, sn, battery, sleepIn, (int32_t)(now - chOverlayUntil) < 0);
   }
   if (saveDirty && !settingsScreen && now - lastChangeMs >= SAVE_DELAY_MS) saveSettings();

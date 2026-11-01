@@ -24,6 +24,9 @@ constexpr int TONE_STEP_HZ = 50;
 constexpr int VOLUME_DEFAULT = 3;
 constexpr uint32_t TONE_PREVIEW_MS = 150;  // 設定変更時の試聴音の長さ
 
+// ---- 設定画面 ----
+constexpr uint32_t DEFAULTS_CONFIRM_MS = 3000;  // DEFAULTS: 1 回目からこの時間内にもう 1 回押すと既定値に戻す
+
 // ---- 電源 ----
 constexpr uint32_t SLEEP_TIMEOUT_MS = 180000;  // 電池運用時、無操作・無受信でこの時間経つとスリープ
 constexpr uint32_t SLEEP_WARN_MS = 10000;      // スリープ前に予告を表示する時間

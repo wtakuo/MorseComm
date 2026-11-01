@@ -37,6 +37,7 @@ constexpr uint16_t COL_LORA = 0x8010;    // LoRa 使用中のチャンネル表�
 constexpr uint16_t COL_OFF_BADGE = 0x52AA;  // 電波 OFF の表示の背景 (灰)
 
 LGFX_Sprite canvas;
+DefaultsState defaultsState = DefaultsState::Idle;  // drawSettings の引数 (itemValue で使う)
 int listTop = 0;  // 設定画面: 先頭に表示している項目
 
 // 末尾を保持するテキストバッファ (あふれたら 1 行ぶんまとめて捨てて折り返し位置を保つ)
@@ -134,6 +135,7 @@ const char* itemLabel(Item it) {
     case Item::Volume: return "VOLUME";
     case Item::Swap: return "PADDLE";
     case Item::Radio: return "RADIO";
+    case Item::Defaults: return "DEFAULTS";
     default: return "";
   }
 }
@@ -145,6 +147,12 @@ void itemValue(const Settings& s, Item it, char* buf, size_t n) {
     case Item::SideOn: snprintf(buf, n, "%s", s.sideOn ? "ON" : "OFF"); break;
     case Item::SideHz: snprintf(buf, n, "%u Hz", s.sideHz); break;
     case Item::RxHz: snprintf(buf, n, "%u Hz", s.rxHz); break;
+    case Item::Defaults:
+      snprintf(buf, n, "%s",
+               defaultsState == DefaultsState::Armed  ? "PRESS AGAIN"
+               : defaultsState == DefaultsState::Done ? "RESTORED"
+                                                      : "RESTORE");
+      break;
     case Item::Volume: snprintf(buf, n, "%u / %d", s.volume, 5); break;
     case Item::Swap: snprintf(buf, n, "%s", s.swap ? "SWAPPED" : "NORMAL"); break;
     case Item::Radio:
@@ -240,6 +248,7 @@ TouchEvent pollTouch(bool settingsScreen) {
   } else if ((kind == TouchEvent::Plus || kind == TouchEvent::Minus) && kind == touchState.kind &&
              (int32_t)(now - touchState.nextRepeat) >= 0) {
     touchState.nextRepeat = now + TOUCH_REPEAT_MS;  // 押し続けで連続変更
+    ev.repeat = true;
   } else {
     return ev;
   }
@@ -348,7 +357,8 @@ void drawMain(const Settings& s, const Control& c, const Snapshot& snap, const B
   present();
 }
 
-void drawSettings(const Settings& s, Item selected, bool editing, const Battery& bat) {
+void drawSettings(const Settings& s, Item selected, bool editing, const Battery& bat, DefaultsState defaults) {
+  defaultsState = defaults;
   char tmp[32];
   bool touch = hw::hasTouch();
   int listW = touch ? LIST_W : W;  // タッチの無いボードは右側の +/- ボタンを描かない
