@@ -698,18 +698,19 @@ void pollSerial() {
 }
 
 // ---- Buttons / touch ----
-// KEY1 = front button (StickS3: BtnA), KEY2 = side button (StickS3: BtnB)
-// Main screen:  KEY1 short = channel +1 / KEY1 long = send the message
-//              KEY2 short = settings screen / KEY2 long = clear displayed text
+// BtnA = front button, BtnB = side button (ui::Button::Key1* / Key2*). The
+// Cardputer has only BtnA, which takes the BtnB role; see handleKey
+// Main screen:
+//   BtnA short = channel +1 / BtnA long = send the stored message
+//   BtnB short = settings screen / BtnB long = clear displayed text
 // Settings screen (with touch: Nesso N1):
-//              KEY1 short = next item / KEY2 short = previous item / long =
-//              exit (save) touch an item to select it, touch [up triangle]
-//              [down triangle] on the right to change the value (hold to
-//              repeat)
-// Settings screen (no touch: StickS3):
-//   Selecting: KEY1 short = next item / KEY2 short = start editing / long =
-//   exit (save) Editing:   KEY1 short = + / KEY2 short = - / long = finish
-//   editing
+//   BtnA short = next item / BtnB short = previous item / long = exit (save)
+//   Touch an item to select it; touch the up / down triangle on the right to
+//   change the value (hold to repeat)
+// Settings screen (no touch: StickS3, StickC Plus2, StickC Plus):
+//   Selecting: BtnA short = next item / BtnB short = start editing /
+//              long = exit (save)
+//   Editing:   BtnA short = + / BtnB short = - / long = finish editing
 void adjustSelected(int dir) {
     if (selected == ui::Item::Defaults) {
         // first press arms the confirmation, a second press within

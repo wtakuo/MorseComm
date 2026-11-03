@@ -16,8 +16,8 @@ struct Battery {
 // Board initialization (sets the screen to 240x135 landscape)
 void begin();
 lgfx::LGFX_Device& display();
-// Physical buttons: 0 = front (Nesso: KEY1 / StickS3: BtnA), 1 = side (Nesso:
-// KEY2 / StickS3: BtnB). true while pressed
+// Physical buttons: 0 = BtnA (front), 1 = BtnB (side). On the Nesso N1 these
+// are the KEY1 / KEY2 pins of its library. true while pressed
 bool button(int i);
 bool hasTouch();
 // Returns screen coordinates while touched

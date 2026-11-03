@@ -11,7 +11,7 @@ bool usbPowered();
 bool wokeFromSleep();
 // State of the SYS_IRQ interrupt line etc. (for diagnostics)
 void printStatus();
-// Turn off the screen and enter deep sleep, woken by a button (KEY1/KEY2). Does
+// Turn off the screen and enter deep sleep, woken by a button (BtnA/BtnB). Does
 // not return (returns false only if it could not enter because the interrupt
 // line was already Low)
 bool enterDeepSleep();

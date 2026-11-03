@@ -17,9 +17,9 @@ namespace {
 constexpr int PIN_BTN[2] = {11,
                             12};  // BtnA (front), BtnB (side). Pressed = LOW
 #elif defined(BOARD_CARDPUTER)
-// Only one button, G0 (BtnA). It takes the role of KEY2 on other boards (side:
-// settings screen / long press clears text). KEY1's roles such as channel
-// switching are done with the keyboard
+// Only one button, BtnA (GPIO 0). It takes the role of BtnB on other boards
+// (settings screen / long press clears text). BtnA's roles on other boards,
+// such as channel switching, are done with the keyboard
 constexpr int PIN_BTN[2] = {-1, 0};
 #else
 constexpr int PIN_BTN[2] = {37,

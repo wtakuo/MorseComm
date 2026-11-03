@@ -36,6 +36,7 @@ Item itemAt(int index);
 int itemIndex(Item it);
 Item stepItem(Item it, int dir);
 
+// Key1 = BtnA (front), Key2 = BtnB (side)
 enum class Button : uint8_t { None, Key1Short, Key1Long, Key2Short, Key2Long };
 
 struct TouchEvent {

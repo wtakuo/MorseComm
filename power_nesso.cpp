@@ -12,8 +12,8 @@ BUILD_INFO_UNIT();
 namespace power {
 namespace {
 
-// IO expander PI4IOE5V6408 (0x43: KEY1=bit0, KEY2=bit1 / 0x44: VIN_DETECT=bit5
-// etc.)
+// IO expander PI4IOE5V6408 (0x43: KEY1 = BtnA = bit0, KEY2 = BtnB = bit1 /
+// 0x44: VIN_DETECT=bit5 etc.)
 constexpr uint8_t EXP_KEYS = 0x43;
 constexpr uint8_t EXP_SYS = 0x44;
 constexpr uint8_t REG_INT_MASK = 0x11;    // 1 = no interrupt

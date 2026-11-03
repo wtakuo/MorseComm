@@ -31,7 +31,7 @@ constexpr int HP_VOLUME_DEFAULT = 2;
 constexpr uint32_t TONE_PREVIEW_MS =
     150;  // length of the preview tone played when a setting changes
 
-// ---- Stored message (sent once by KEY1 long press / fn + down on the
+// ---- Stored message (sent once by BtnA long press / fn + down on the
 // Cardputer; set with the "msg" serial command) ----
 constexpr const char* MSG_DEFAULT = "VVV VVV";
 constexpr int MSG_MAX = 64;  // maximum length (characters)
