@@ -471,6 +471,12 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     (コメントを除いたトークン列を整形前と比較して確認。違いは長い文字列の分割と board.h の #error の文言だけ)
 18. (2026-11-03) Cardputer ADV + Cap LoRa-1262 で LoRa に対応。Cap の技適の範囲に合わせて全局の LoRa を
     922.0〜923.4MHz / BW125 に変更 (§4.6, §10)
+19. (2026-11-03) 登録メッセージの送信 (ユーザー要望): KEY1 長押し (Cardputer は fn + ↓) で 1 回送る。
+    **それまでの KEY1 長押し = チャンネル -1 は廃止** (短押しで循環するので 8 チャンネルとも選べる)。
+    メッセージは `msg TEXT` で設定 (大文字化・空白の連続をまとめる、モールスの無い文字は拒否、64 文字まで, cfg::MSG_MAX)、
+    Preferences のキー "msg"、既定 "VVV VVV" (cfg::MSG_DEFAULT。DEFAULTS / `defaults` でも戻る)。
+    送信は g_typeBuf に積む (キーボード・端末モードと同じ。未送信の文字があれば語間を挟んで後ろに付け、入りきらなければ無視)。
+    `show` にも msg= を出す。電波 OFF でもサイドトーンとデコード表示で練習に使える
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
@@ -503,7 +509,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - 画面 (ユーザー要望で改訂済み):
   - メイン画面: 最上段にリンク状態 (dBm・loss・R再同期・Wウォッチドッグ、Font2)、右端に電池 % (+充電中)。
     RX 3 行 (緑) / TX 2 行 (黄)、文字は Font0 x2
-  - メイン画面のボタン (2026-10-30 にユーザー指示で変更): KEY1 短押し = チャンネル +1 (循環)、KEY1 長押し = チャンネル -1、
+  - メイン画面のボタン (2026-10-30 にユーザー指示で変更): KEY1 短押し = チャンネル +1 (循環)、KEY1 長押し = 登録メッセージの送信 (2026-11-03 変更。以前はチャンネル -1)、
     KEY2 短押し = 設定画面、KEY2 長押し = テキスト消去。チャンネル切り替え時は中央に "CH n" を 1.2 秒大きく表示
     (ユーザーが実機で確認済み)
   - 最上段: [CHn] x局数(2局以上) dBm L% R W ... 電池
@@ -544,10 +550,10 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   送信中はキー・パドル無視。エコーは即時、行頭 "> " (打った文字) / "< " (受信)。BS は未送信分だけ取り消し、
   符号の無い文字は BEL。Ctrl-C / Ctrl-D で終了。端末モード中は log と "settings saved" を出さない。
   StickS3 (RADIO OFF) でエコー・BS・終了を確認。ユーザーが端末モードの動作を確認済み (2 台間の確認はまだ)
-- シリアルコマンド: ch N / radio espnow|lora|off / term / defaults / output speaker|phones (ADV) / mode / wpm / side N|on|off / rxtone / vol / swap / jitter /
+- シリアルコマンド: ch N / radio espnow|lora|off / term / msg [TEXT] / defaults / output speaker|phones (ADV) / mode / wpm / side N|on|off / rxtone / vol / swap / jitter /
   test on [TEXT] (`[SK]` で文字間なし送信) / test off / loss N / dropup 0|1 / log 0|1 / stats / show / clear / save /
   sleep / help (README に一覧)。`stats` の `|` 以降は送信側 (無線の種類, sent, csBusy, air など)
-- 設定は Preferences (名前空間 "morse") に保存。キー: mode wpm sideon sidehz rxhz vol swap ch radio、
+- 設定は Preferences (名前空間 "morse") に保存。キー: mode wpm sideon sidehz rxhz vol swap ch radio msg、
   ジッタ遅延は無線ごとに jitter (ESP-NOW, 既定 150) / ljitter (LoRa, 既定 250)。
   実機 (2026-11-01 の状態): いずれも ESP-NOW・CH1。Nesso A = IAMBIC_B, Nesso B = STRAIGHT, StickS3 = IAMBIC_B,
   Plus2 A = IAMBIC_B 22WPM, Plus2 B = IAMBIC_B 20WPM。設定はユーザーがよく変えるので、試験前に `show` で

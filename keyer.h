@@ -308,6 +308,9 @@ class TypeBuffer {
     }
     void clear() { len_ = 0; }
     int size() const { return len_; }
+    int space() const { return CAP - len_; }
+    // Last character waiting to be sent (0 if empty)
+    char back() const { return len_ ? at(len_ - 1) : 0; }
     // Copy the characters waiting to be sent into out (for display.
     // NUL-terminated; if it does not fit, the tail end is copied)
     void copyTo(char* out, int cap) const {

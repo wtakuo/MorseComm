@@ -123,7 +123,7 @@ KEY1 is the front button (BtnA on the StickS3), and KEY2 is the side button (Btn
 | Screen | Action | Result |
 |---|---|---|
 | Main | KEY1 (front) short press | Advance the channel by 1 (after 8 comes 1). The new number is shown large in the center of the screen |
-| Main | KEY1 long press | Go back one channel |
+| Main | KEY1 long press | Send the stored message once (default `VVV VVV`; set it with `msg`). It is queued after any text still waiting to be sent |
 | Main | KEY2 (side) short press | Open the settings screen |
 | Main | KEY2 long press | Clear the displayed text |
 | Settings (Nesso) | KEY1 short press / KEY2 short press | Next item / previous item |
@@ -174,6 +174,7 @@ On the Cardputer, characters typed on the keyboard are sent directly (at the SPE
 | Main | space / enter / tab | Word gap |
 | Main | Enclose in `[` `]` | Send continuously without character gaps (e.g. `[SK]`) |
 | Main | fn + left (`,`) / fn + right (`/`) | Go back / advance one channel |
+| Main | fn + down (`.`) | Send the stored message once (same as KEY1 long press on the other boards) |
 | Main | esc (fn + `` ` ``, or just `` ` ``) | Open the settings screen |
 | Main | G0 button short press / long press | Open the settings screen / clear the displayed text |
 | Settings | up / down (fn + `;` / `.`; fn is optional on the settings screen) | Previous / next item |
@@ -221,6 +222,7 @@ Serial output is in English (US-ASCII) only, with CR LF line endings.
 | `swap 0\|1` | Swap the paddle |
 | `jitter N` | Jitter buffer delay (ms; default ESP-NOW 150 / LoRa 250. Saved separately for each radio type) |
 | `term` | Terminal mode (see below). Exit with Ctrl-C |
+| `msg [TEXT]` | Show / set the message sent by KEY1 long press (fn + down on the Cardputer). Up to 64 Morse characters (`[SK]` style prosigns allowed); saved. Default `VVV VVV` |
 | `test on [TEXT]` / `test off` | Test mode: keeps automatically keying TEXT at the current WPM. Enclosing in square brackets like `[SK]` sends without character gaps |
 | `loss N` | Loss injection: skip sending with probability N% |
 | `dropup 0\|1` | Loss injection: skip all packets whose key state is UP |

@@ -169,7 +169,55 @@ const char* radioName(uint8_t radio) {
                                      : "espnow";
 }
 
+// Stored message (cfg::MSG_DEFAULT unless set with "msg"). Used only by loop()
+char g_message[cfg::MSG_MAX + 1];
+
+// Normalize a message: uppercase, collapse runs of spaces, trim. Returns false
+// if it contains a character without a Morse code (or is empty / too long)
+bool normalizeMessage(const char* in, char* out) {
+    int n = 0;
+    for (const char* p = in; *p; p++) {
+        char ch = *p;
+        if (ch >= 'a' && ch <= 'z') ch -= 'a' - 'A';
+        if (ch == ' ' || ch == '\t') {
+            if (n > 0 && out[n - 1] != ' ') {
+                if (n >= cfg::MSG_MAX) return false;
+                out[n++] = ' ';
+            }
+            continue;
+        }
+        if (ch != '[' && ch != ']' && !cw::morseEncode(ch)) return false;
+        if (n >= cfg::MSG_MAX) return false;
+        out[n++] = ch;
+    }
+    while (n > 0 && out[n - 1] == ' ') n--;
+    out[n] = 0;
+    return n > 0;
+}
+
+void loadMessage() {
+    prefs.begin("morse", true);
+    String m = prefs.getString("msg", cfg::MSG_DEFAULT);
+    prefs.end();
+    if (!normalizeMessage(m.c_str(), g_message))
+        normalizeMessage(cfg::MSG_DEFAULT, g_message);
+}
+
+// Queue the stored message once (after anything still waiting to be sent,
+// separated by a word gap). Ignored if it does not fit in the buffer
+void sendMessage() {
+    int len = strlen(g_message);
+    lockShared();
+    bool gap = g_typeBuf.size() > 0 && g_typeBuf.back() != ' ';
+    if (g_typeBuf.space() >= len + (gap ? 1 : 0)) {
+        if (gap) g_typeBuf.push(' ');
+        for (int i = 0; i < len; i++) g_typeBuf.push(g_message[i]);
+    }
+    unlockShared();
+}
+
 void loadSettings() {
+    loadMessage();
     Settings s;
     prefs.begin("morse", true);
     s.mode = prefs.getUChar("mode", s.mode);
@@ -296,6 +344,7 @@ void printHelp() {
         {"output speaker|phones", "sound output (Cardputer ADV only)"},
         {"jitter N", "jitter buffer delay (ms)"},
         {"term", "terminal mode: type to send"},
+        {"msg [TEXT]", "show / set the message (KEY1 long press)"},
         {"test on [TEXT]", "send TEXT repeatedly at the current WPM"},
         {"test off", "stop the test"},
         {"loss N", "drop N% of sent packets (test)"},
@@ -466,6 +515,7 @@ void restoreDefaults() {
     g_settingsVer++;
     unlockShared();
     saveSettings();
+    loadMessage();  // the namespace was cleared, so back to MSG_DEFAULT
     asyncOut();
     Serial.print("settings restored to defaults\r\n");
 }
@@ -552,6 +602,22 @@ void handleCommand(char* line) {
     } else if (!strcmp(cmd, "term")) {
         enterTerm(true);
         return;
+    } else if (!strcmp(cmd, "msg")) {
+        if (arg && *arg) {
+            char m[cfg::MSG_MAX + 1];
+            if (!normalizeMessage(arg, m)) {
+                Serial.printf(
+                    "invalid message (Morse characters only, up to %d)\r\n",
+                    cfg::MSG_MAX);
+                return;
+            }
+            strcpy(g_message, m);
+            prefs.begin("morse", false);
+            prefs.putString("msg", g_message);
+            prefs.end();
+        }
+        Serial.printf("msg=\"%s\"\r\n", g_message);
+        return;
     } else if (!strcmp(cmd, "log") && arg) {
         lockShared();
         g_logOn = n != 0;
@@ -568,6 +634,7 @@ void handleCommand(char* line) {
                       buildinfo::commit());
         Serial.printf("touch=%s\r\n",
                       ui::touchAvailable() ? "ok" : "not found");
+        Serial.printf("msg=\"%s\"\r\n", g_message);
     } else if (!strcmp(cmd, "defaults")) {
         restoreDefaults();
         restartIfRadioChanged();
@@ -632,7 +699,7 @@ void pollSerial() {
 
 // ---- Buttons / touch ----
 // KEY1 = front button (StickS3: BtnA), KEY2 = side button (StickS3: BtnB)
-// Main screen:  KEY1 short = channel +1 / KEY1 long = channel -1
+// Main screen:  KEY1 short = channel +1 / KEY1 long = send the message
 //              KEY2 short = settings screen / KEY2 long = clear displayed text
 // Settings screen (with touch: Nesso N1):
 //              KEY1 short = next item / KEY2 short = previous item / long =
@@ -720,7 +787,8 @@ void enterSettings(bool on, uint32_t now) {
 // Main screen: character keys = send that character (in typed order at the
 // configured speed), BS = cancel the last not-yet-sent character,
 //             Enter / Tab / Space = word gap, fn+left / fn+right = channel -1 /
-//             +1, esc (fn+`) or ` = settings screen
+//             +1, fn+down = send the stored message, esc (fn+`) or ` =
+//             settings screen
 // Settings screen: up / down (or ; . without fn) = select item, left / right (,
 // /) = decrease / increase value,
 //             Enter (OK) = advance value (DEFAULTS executes on the 2nd press),
@@ -748,6 +816,8 @@ void handleKey(int k, uint32_t now) {
         enterSettings(true, now);
     } else if (k == hw::KEY_LEFT || k == hw::KEY_RIGHT) {
         if (radioOn) stepChannel(k == hw::KEY_RIGHT ? +1 : -1, now);
+    } else if (k == hw::KEY_DOWN) {
+        sendMessage();
     } else if (k == hw::KEY_BACKSPACE) {
         lockShared();
         g_typeBuf.popBack();
@@ -790,7 +860,7 @@ void pollInput(uint32_t now) {
                 if (radioOn) stepChannel(+1, now);
                 break;
             case ui::Button::Key1Long:
-                if (radioOn) stepChannel(-1, now);
+                sendMessage();
                 break;
             case ui::Button::Key2Short:
                 enterSettings(true, now);
