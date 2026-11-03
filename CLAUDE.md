@@ -377,6 +377,9 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - 同梱の GPS (ATGM336H, UART G13/G15) は使っていない
   - 実機 (2026-11-03, 机上): ADV ⇔ Nesso の LoRa 双方向で PARIS 20WPM / CQ TEST を再現 (60/180/420ms、まれに +1〜7ms)、
     デコード誤りなし、ロス 0.4〜0.7%。送信時間 約 25.8ms/パケット (air/sent の実測)
+  - ユーザー確認済み (2026-11-03): 設定画面の RADIO (ESP-NOW → LoRa → OFF)、キーボード・パドルでの ADV ⇔ Nesso の
+    双方向の送受信、紫地 "LoRa1" とチャンネルの分離、電池でのスリープと G0 での復帰後の LoRa。
+    電源を切って Cap を外すと RADIO で LoRa が選べず、付け直すと選べて送受信できること
 - LoRa (Nesso N1, 2026-10-30 調査・実機確認):
   - SX1262。SPI は画面と共有 (SCK=20, MOSI=21, MISO=22)。CS=GPIO23 (`LORA_CS`), BUSY=GPIO19, DIO1=GPIO15 (`LORA_IRQ`),
     NRST は無し (RADIOLIB_NC)。**画面 (loop) と LoRa タスクが同じ SPI を使うので `hw::lockBus()` で排他している**
