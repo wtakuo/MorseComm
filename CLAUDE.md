@@ -473,8 +473,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - 6 機種 (Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus / Cardputer / Cardputer ADV) すべてユーザーが実機で動作確認済み
 
 ### 書き込んであるビルド (2026-11-01)
-- (2026-11-03) Cardputer ADV と Nesso 1 台 (/dev/cu.usbmodem101 に接続していた方) に LoRa 922MHz 版を書き込み済み
-  (未コミットの状態のビルド)。**LoRa の周波数・帯域を変えたので、もう 1 台の Nesso も書き直さないと LoRa で通信できない**。
+- (2026-11-03) Cardputer ADV と Nesso (MAC [Nesso-C]。§10 の 2 台とは別の個体) にコミット 3df9a6b
+  (LoRa 922MHz 版) を書き込み済み。**LoRa の周波数・帯域を変えたので、他の Nesso も書き直さないと LoRa で通信できない**。
   ADV の RADIO は試験で LoRa にしたまま
 - 全 11 台 (Nesso ×2, StickS3, Plus2 ×2, Plus ×2, Cardputer, Cardputer ADV) にコミット 685479e のビルドを書き込み済み。
   スプラッシュの表示を StickS3・Nesso・Plus2・Plus・Cardputer (初代・ADV) の全機種でユーザーが確認済み
