@@ -263,9 +263,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   `NessoDisplay::begin()` が INPUT_PULLUP に設定する。I2C なので loop() 側からのみ読む
 - Grove: GPIO5 = `GROVE_IO_0`, GPIO4 = `GROVE_IO_1`。`GROVE_POWER_EN` (エキスパンダ) を触らなくても
   INPUT_PULLUP + キー接点 → GND で読めることを実機で確認
-- 2台のシリアルポートと MAC アドレス:
-  - `/dev/cu.usbmodem101`  : [Nesso-A] — アイアンビックパドル (GPIO4, GPIO5)
-  - `/dev/cu.usbmodem1101` : [Nesso-B] — ストレートキー (GPIO4)
+- 手元の Nesso は 3 台。開発当初の 2 台は Nesso A (アイアンビックパドル, GPIO4/GPIO5) と Nesso B (ストレートキー, GPIO4)、
+  2026-11-03 に Nesso C を追加。ポート名は接続のたびに変わるので、`show` (mode など) で見分ける
 - キー・パドルの接続ピン: ストレート = GPIO4。パドル = DIT GPIO4 / DAH GPIO5 (ユーザー確認済み。設定画面の PADDLE で入れ替え可)
 - トーン出力の方法とピン: 内蔵ブザー `BEEP_PIN` = GPIO11 を LEDC PWM で駆動 (音量はデューティ比で5段階)。サイドトーンと受信トーンは別周波数、自局 DOWN 時はサイドトーン優先
 - タッチ: FT6x36 (0x38, `NessoTouch`)。生座標 (縦置き 135x240) → setRotation(1) の画面座標は「xy 入れ替え + y 反転」で正しいことを実機で確認 (config.h の TOUCH_*)
@@ -303,15 +302,14 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     設定する (ARDUINO_USB_CDC_ON_BOOT で分岐)。**macOS では USB-UART のポートを閉じると設定が 9600bps に戻る**ので、
     tools/ser.sh は開いた fd に対して stty する。**ポートを開くと本体が再起動する** (2026-11-01 に確認。
     以前は再起動しないように見えた) ので、ser.sh は usbserial のポートでは 2.5 秒待ってからコマンドを送る
-  - 2 台目の Plus2 (MAC [Plus2-B], /dev/cu.usbserial-XXXX) も追加。1 台目は [Plus2-A]
-    (/dev/cu.usbserial-XXXX)。2 台の Plus2 間でも PARIS 20WPM の再現・デコードを確認
+  - 2 台目の Plus2 (Plus2 B) も追加 (1 台目は Plus2 A)。2 台の Plus2 間でも PARIS 20WPM の再現・デコードを確認
   - 実機: Plus2 ⇔ StickS3 の ESP-NOW 双方向で PARIS 20WPM / CQ TEST 30WPM の DOWN/UP 長を再現 (±1ms)、デコード誤りなし
   - ユーザー確認済み (2026-10-31): 画面の向き・表示、サイドトーン・受信トーン、ボタンの役割 (他機種と同じ)、
     電池で 3 分後のスリープとボタンでの復帰。Grove へのキー・パドル接続 (G33/G32) も 2026-11-01 にユーザーが確認済み
 - M5StickC Plus (2026-11-01 調査・実機確認, 2 台):
   - FQBN: `m5stack:esp32:m5stack_stickc_plus` (ビルドディレクトリ build/stickcplus)。ESP32-PICO-D4。電池 120mAh
-  - **書き込み速度:** 既定 1500000bps で "The chip stopped responding" になる個体があった ([Plus-B])。750000 でも失敗、
-    `:UploadSpeed=115200` で成功 (約 70 秒)。もう 1 台 ([Plus-A]) は既定の速度で書けた
+  - **書き込み速度:** 既定 1500000bps で "The chip stopped responding" になる個体があった (Plus B)。750000 でも失敗、
+    `:UploadSpeed=115200` で成功 (約 70 秒)。もう 1 台 (Plus A) は既定の速度で書けた
   - PMIC AXP192 (電源・バックライトを管理。M5Unified が扱う)。USB は AXP192 の VBUS に入り、`M5.Power.getVBUSVoltage()` で
     約 5100mV → USB 給電の検出は StickS3 と同じく > 4000mV で判定 (実機で確認)。充電中は isCharging = 1
   - ボタン BtnA = G37, BtnB = G39、ブザー G2、Grove G32 (黄) / G33 (白) は Plus2 と同じ。キーも Plus2 と同じ
@@ -321,8 +319,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - power_stickcplus2.cpp を power_stickc.cpp に改名して Plus2 と共用 (#if で違う所だけ分ける)。
     **ファイルを改名したら、そのボードのビルドディレクトリに古い .o が残るので `--clean` でビルドし直すこと**
   - USB シリアルは FTDI 系 (/dev/cu.usbserial-*)。ポートを開くと再起動する点は Plus2 と同じ
-  - 実機: Plus ⇔ Plus の ESP-NOW で PARIS 20WPM を再現 (60/180/420ms)、デコード誤りなし、ロス 0.3%。
-    MAC [Plus-A] (/dev/cu.usbserial-XXXX), [Plus-B] (/dev/cu.usbserial-XXXX)
+  - 実機: Plus ⇔ Plus の ESP-NOW で PARIS 20WPM を再現 (60/180/420ms)、デコード誤りなし、ロス 0.3%。2 台 (Plus A / Plus B)
   - ユーザー確認済み (2026-11-01): 画面の向き・表示、サイドトーン・受信トーン、ボタン (チャンネル・設定画面・DEFAULTS)、
     電池でのスリープ (画面消灯) とボタンでの復帰、Grove へのキー・パドル接続
 - M5Stack Cardputer (初代, 2026-11-01 調査・実機確認, 1 台):
@@ -346,10 +343,10 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - 電源: PMIC 無し。USB 給電は検出できないので `HWCDC::isPlugged()` (PC と USB シリアルで通信中) で代用。
     充電器だけなら電池運用と同じく 3 分で眠る。スリープはバックライト G38 を LOW で gpio_hold し、G0 の EXT1 ANY_LOW で
     復帰 (起動時に hw::begin で保持を解除)。電池電圧は G10 の ADC (M5.Power)
-  - 実機: Cardputer ⇔ StickS3 の ESP-NOW 双方向で PARIS / CQ TEST を再現 (±1ms)、デコード誤りなし。MAC [Cardputer]
+  - 実機: Cardputer ⇔ StickS3 の ESP-NOW 双方向で PARIS / CQ TEST を再現 (±1ms)、デコード誤りなし
   - ユーザー確認済み (2026-11-01): 画面の向き・表示、サイドトーン・受信トーン、キーボードでの送信 (灰色の未送信表示・del・
     fn+←→ のチャンネル)、設定画面の矢印・enter・esc (DEFAULTS を含む)、Grove のキー・パドル、電池でのスリープと G0 での復帰
-- M5Stack Cardputer ADV (2026-11-01 調査・実機確認, 1 台, MAC [Cardputer-ADV]):
+- M5Stack Cardputer ADV (2026-11-01 調査・実機確認, 1 台):
   - ボードパッケージに ADV 専用の FQBN は無い。**初代と同じ `m5stack_cardputer` でビルドし、M5Unified が起動時に
     board_M5CardputerADV と判別する** (M5GFX の probe)。実行時に `M5.getBoard()` で分岐する (hw::hasPhoneJack)
   - キーボード: TCA8418 (内部 I2C = M5.In_I2C, SDA G8 / SCL G9, アドレス 0x34, INT G11 は使わず 20ms ごとに FIFO を読む)。
@@ -432,6 +429,11 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   使わないよう `target: deps ; command` の形で書いてある (macOS の GNU Make 3.81 は .RECIPEPREFIX が無い)
 - README は **README.md = 英語、README.ja.md = 日本語**。内容を変えたら両方を直すこと。CLAUDE.md は日本語のまま
 - ライセンスは MIT (LICENSE, Copyright (c) 2026 Takuo Watanabe)
+- **(2026-11-03 ユーザー指示)** 手持ちのデバイスの MAC アドレスや USB シリアルのシリアル番号 (/dev/cu.usbserial-XXXX の
+  XXXX) は**リポジトリに書かない** (GitHub で公開しているため)。個体は Nesso A / Plus2 B などの呼び名で書く。
+  2026-11-03 に git の履歴全体からも消した (filter-branch で書き換えて強制プッシュ)。このため、それ以前のコミット
+  ハッシュはすべて変わっている (例: 685479e → 1282329, acd7583 → 95b4923, 3df9a6b → f3fe800)。
+  古いコミットメッセージ中のハッシュは書き換え前のもの
 
 ## 13. 作業状況と再開メモ (2026-11-01 時点)
 
@@ -476,10 +478,11 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - 6 機種 (Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus / Cardputer / Cardputer ADV) すべてユーザーが実機で動作確認済み
 
 ### 書き込んであるビルド (2026-11-01)
-- (2026-11-03) Cardputer ADV と Nesso (MAC [Nesso-C]。§10 の 2 台とは別の個体) にコミット 3df9a6b
+- (2026-11-03) Cardputer ADV と Nesso C にコミット f3fe800
   (LoRa 922MHz 版) を書き込み済み。**LoRa の周波数・帯域を変えたので、他の Nesso も書き直さないと LoRa で通信できない**。
-  ADV の RADIO は試験で LoRa にしたまま
-- 全 11 台 (Nesso ×2, StickS3, Plus2 ×2, Plus ×2, Cardputer, Cardputer ADV) にコミット 685479e のビルドを書き込み済み。
+  ADV の RADIO は試験で LoRa にしたまま。同日 Nesso A / B にも 58de82b を書き込み、LoRa で 4 台 (Nesso ×3, ADV) の
+  通信をユーザーが確認済み
+- 全 11 台 (Nesso ×2, StickS3, Plus2 ×2, Plus ×2, Cardputer, Cardputer ADV) にコミット 1282329 のビルドを書き込み済み。
   スプラッシュの表示を StickS3・Nesso・Plus2・Plus・Cardputer (初代・ADV) の全機種でユーザーが確認済み
 
 ### 次にやること (ユーザー予定)
@@ -546,8 +549,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   sleep / help (README に一覧)。`stats` の `|` 以降は送信側 (無線の種類, sent, csBusy, air など)
 - 設定は Preferences (名前空間 "morse") に保存。キー: mode wpm sideon sidehz rxhz vol swap ch radio、
   ジッタ遅延は無線ごとに jitter (ESP-NOW, 既定 150) / ljitter (LoRa, 既定 250)。
-  実機 (2026-11-01 の状態): いずれも ESP-NOW・CH1。Nesso 101 = IAMBIC_B, Nesso 1101 = STRAIGHT, StickS3 = IAMBIC_B,
-  Plus2 ([Plus2-A]) = IAMBIC_B 22WPM, Plus2 ([Plus2-B]) = IAMBIC_B 20WPM。設定はユーザーがよく変えるので、試験前に `show` で
+  実機 (2026-11-01 の状態): いずれも ESP-NOW・CH1。Nesso A = IAMBIC_B, Nesso B = STRAIGHT, StickS3 = IAMBIC_B,
+  Plus2 A = IAMBIC_B 22WPM, Plus2 B = IAMBIC_B 20WPM。設定はユーザーがよく変えるので、試験前に `show` で
   記録し、試験で変えたら元に戻すこと (ポート番号は接続のたびに変わる)
 - M5StickS3 対応 (2026-10-30): 上記の機能はすべて共通。設定画面はタッチが無いので選択/変更モード
   (選択: A=次, B=変更開始, 長押し=終了 / 変更: A=+, B=-, 長押し=選択へ戻る)。
