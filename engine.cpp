@@ -306,7 +306,7 @@ bool begin() {
     Settings s0 = g_settings;
     unlockShared();
     bool ok = net::begin(s0.radio, s0.channel);
-    // LoRa has a long transmit interval (about 60ms), so the idle heartbeat is
+    // LoRa has a long transmit interval (about 80ms), so the idle heartbeat is
     // also thinned out
     if (net::radio() == cfg::RADIO_LORA)
         sched.setIdleInterval(cfg::LORA_TX_INTERVAL_IDLE_MS);

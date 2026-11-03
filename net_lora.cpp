@@ -1,10 +1,12 @@
-// net_lora.cpp - LoRa (SX1262) send/receive (Arduino Nesso N1 only)
+// net_lora.cpp - LoRa (SX1262) send/receive
+// Arduino Nesso N1 (built-in) and Cardputer ADV with Cap LoRa-1262
+// (the Cap is detected at run time; the original Cardputer has no bus for it)
 //
 // As a 920 MHz band specified low-power radio station (20 mW or less), comply
 // with the conditions of the carrier sense >= 5 ms category:
 //   - Carrier sense for at least 5 ms before transmitting; do not transmit if a
 //   signal of -80 dBm (antenna input / feed point) or more is present
-//   - Pause at least 50 ms after transmitting (one transmission is about 7 ms,
+//   - Pause at least 50 ms after transmitting (one transmission is about 25 ms,
 //   far shorter than the 4 s limit)
 // Settings are LORA_* in config.h.
 //
@@ -24,18 +26,88 @@
 BUILD_INFO_UNIT();
 #include "net_internal.h"
 
-#if defined(BOARD_NESSO_N1)
+#if defined(BOARD_NESSO_N1) || defined(BOARD_CARDPUTER)
 #include <Arduino.h>
-#include <Arduino_Nesso_N1.h>
 #include <RadioLib.h>
 #include <esp_random.h>
 #include <string.h>
 #include "config.h"
 #include "hw.h"
+#if defined(BOARD_NESSO_N1)
+#include <Arduino_Nesso_N1.h>
+#else
+#include <M5Unified.h>
+#include <SPI.h>
+#include "utility/PI4IOE5V6408_Class.hpp"
+#endif
 
 namespace net {
 namespace lora {
 namespace {
+
+// ---- Board-specific hardware ----
+#if defined(BOARD_NESSO_N1)
+// SPI is shared with the display (default SPI pins); no reset line
+SX1262 radio = new Module(LORA_CS, LORA_IRQ, RADIOLIB_NC, LORA_BUSY);
+constexpr int8_t POWER_DBM = cfg::LORA_POWER_DBM_NESSO;
+constexpr int LNA_GAIN_DB = cfg::LORA_LNA_GAIN_DB;
+
+bool probe() { return true; }
+
+// Control lines are on the IO expander (0x43): P7 = reset (HIGH to run), P6
+// = RF switch power, P5 = RX LNA
+void powerUp() {
+    pinMode(LORA_ENABLE, OUTPUT);
+    pinMode(LORA_ANTENNA_SWITCH, OUTPUT);
+    pinMode(LORA_LNA_ENABLE, OUTPUT);
+    digitalWrite(LORA_ENABLE, LOW);
+    delay(10);
+    digitalWrite(LORA_ENABLE, HIGH);
+    delay(10);
+    digitalWrite(LORA_ANTENNA_SWITCH, HIGH);
+    digitalWrite(LORA_LNA_ENABLE, HIGH);
+}
+
+void powerDown() {
+    digitalWrite(LORA_LNA_ENABLE, LOW);
+    digitalWrite(LORA_ANTENNA_SWITCH, LOW);
+}
+#else
+// Cardputer ADV + Cap LoRa-1262 (EXT 14-pin bus). The Cap's SPI (SCK G40,
+// MISO G39, MOSI G14) is shared only with the microSD slot (CS G12), not with
+// the display (SPI3, G35/G36), so no bus lock is needed. NSS G5, DIO1 G4,
+// NRST G3, BUSY G6. The RF switch (FM8625H) is powered from P0 of the Cap's
+// PI4IOE5V6408 (0x43, internal I2C G8/G9) and switched TX/RX by DIO2.
+// TCXO 3.0V on DIO3. No external LNA
+constexpr int PIN_SCK = 40, PIN_MISO = 39, PIN_MOSI = 14, PIN_NSS = 5;
+constexpr int PIN_IRQ = 4, PIN_RST = 3, PIN_BUSY = 6, PIN_SD_CS = 12;
+constexpr uint8_t IOE_ADDR = 0x43, IOE_ANT_SW = 0;
+SPIClass loraSpi(FSPI);
+SX1262 radio = new Module(PIN_NSS, PIN_IRQ, PIN_RST, PIN_BUSY, loraSpi);
+m5::PI4IOE5V6408_Class ioe(IOE_ADDR, 400000, &m5::In_I2C);
+constexpr int8_t POWER_DBM = cfg::LORA_POWER_DBM_CAP;
+constexpr int LNA_GAIN_DB = 0;
+
+// The Cap can only be attached to the ADV (on the original Cardputer, G8/G9
+// are keyboard matrix lines, so I2C must not be used there)
+bool probe() {
+    static int8_t found = -1;
+    if (found < 0) found = hw::hasPhoneJack() && ioe.begin() ? 1 : 0;
+    return found == 1;
+}
+
+void powerUp() {
+    // Keep a microSD card (if inserted) off the shared bus
+    pinMode(PIN_SD_CS, OUTPUT);
+    digitalWrite(PIN_SD_CS, HIGH);
+    ioe.setDirection(IOE_ANT_SW, true);
+    ioe.setHighImpedance(IOE_ANT_SW, false);
+    ioe.digitalWrite(IOE_ANT_SW, true);
+    loraSpi.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_NSS);
+}
+
+void powerDown() { ioe.digitalWrite(IOE_ANT_SW, false); }
+#endif
 
 constexpr size_t SRC_LEN = 6;
 constexpr size_t FRAME_MAX = SRC_LEN + cw::PKT_MAX_SIZE;
@@ -47,7 +119,6 @@ constexpr uint32_t BACKOFF_MIN_MS = 2,
                    BACKOFF_MAX_MS =
                        12;  // Wait after carrier sense detects another station
 
-SX1262 radio = new Module(LORA_CS, LORA_IRQ, RADIOLIB_NC, LORA_BUSY);
 TaskHandle_t task = nullptr;
 volatile bool ready = false;
 uint8_t ownMacAddr[SRC_LEN];
@@ -84,7 +155,7 @@ float freqOf(uint8_t ch) {
 
 // SX1262 RSSI reading -> dBm at the antenna
 int8_t antennaDbm(float raw) {
-    float v = raw - cfg::LORA_LNA_GAIN_DB;
+    float v = raw - LNA_GAIN_DB;
     if (v < -128) v = -128;
     if (v > 0) v = 0;
     return (int8_t)v;
@@ -139,9 +210,8 @@ enum class Cs { Clear, Busy, RxDone };
 // Carrier sense: Clear if the received level stays below the threshold for
 // LORA_CS_US
 Cs carrierSense() {
-    const float level =
-        cfg::LORA_CS_LEVEL_DBM +
-        cfg::LORA_LNA_GAIN_DB;  // Threshold in terms of the SX1262 reading
+    // Threshold in terms of the SX1262 reading
+    const float level = cfg::LORA_CS_LEVEL_DBM + LNA_GAIN_DB;
     uint32_t t0 = micros();
     while (micros() - t0 < cfg::LORA_CS_US) {
         if (dio1) return Cs::RxDone;  // Reception completed: handle it first
@@ -242,26 +312,17 @@ void taskFn(void*) {
 
 }  // namespace
 
-bool available() { return true; }
+bool available() { return probe(); }
 
 bool begin(uint8_t channel) {
+    if (!probe()) return false;
     net::ownMac(ownMacAddr);
     txSeq = (uint16_t)esp_random();
-    // Control lines are on the IO expander (0x43): P7 = reset (HIGH to run), P6
-    // = RF switch power, P5 = RX LNA
-    pinMode(LORA_ENABLE, OUTPUT);
-    pinMode(LORA_ANTENNA_SWITCH, OUTPUT);
-    pinMode(LORA_LNA_ENABLE, OUTPUT);
-    digitalWrite(LORA_ENABLE, LOW);
-    delay(10);
-    digitalWrite(LORA_ENABLE, HIGH);
-    delay(10);
-    digitalWrite(LORA_ANTENNA_SWITCH, HIGH);
-    digitalWrite(LORA_LNA_ENABLE, HIGH);
+    powerUp();
 
     hw::lockBus();
     int st = radio.begin(freqOf(channel), cfg::LORA_BW_KHZ, cfg::LORA_SF,
-                         cfg::LORA_CR, cfg::LORA_SYNC_WORD, cfg::LORA_POWER_DBM,
+                         cfg::LORA_CR, cfg::LORA_SYNC_WORD, POWER_DBM,
                          cfg::LORA_PREAMBLE, cfg::LORA_TCXO_V, true);
     if (st == RADIOLIB_ERR_NONE)
         st = radio.setDio2AsRfSwitch(
@@ -272,6 +333,7 @@ bool begin(uint8_t channel) {
     }
     hw::unlockBus();
     if (st != RADIOLIB_ERR_NONE) {
+        powerDown();
         Serial.printf("LoRa: init failed (%d)\r\n", st);
         return false;
     }
@@ -303,8 +365,7 @@ void end() {
     if (task) xTaskNotifyGive(task);
     uint32_t t0 = millis();
     while (ready && millis() - t0 < 300) delay(2);
-    digitalWrite(LORA_LNA_ENABLE, LOW);
-    digitalWrite(LORA_ANTENNA_SWITCH, LOW);
+    powerDown();
 }
 
 }  // namespace lora

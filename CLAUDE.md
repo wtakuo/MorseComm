@@ -11,7 +11,7 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
 - 受信したキーイングをデコードして画面に文字表示する
 - キーは **ストレートキー** と **パドル (アイアンビック)** の両対応
 - 2台とも送信・受信の両方を行う (往復通信)
-- 無線は ESP-NOW が基本。Nesso N1 どうしは LoRa (SX1262, 920MHz 帯) も選べる (設定の RADIO。2026-10-30 追加, §4.6)
+- 無線は ESP-NOW が基本。Nesso N1 と Cap LoRa-1262 付き Cardputer ADV は LoRa (SX1262, 920MHz 帯) も選べる (設定の RADIO。2026-10-30 追加, 2026-11-03 ADV 対応, §4.6)
 - RADIO = OFF: 電波を出さない単独練習モード (ユーザー要望で追加)。Wi-Fi も LoRa も初期化せず、net::send は何もしない。
   キー・サイドトーン・送信デコード・スリープは通常どおり。メイン画面は灰色の "OFF" / "RADIO OFF"、KEY1 (チャンネル) は無効。
   設定画面の RADIO は Nesso: ESP-NOW → LoRa → OFF、StickS3 / StickC Plus2: ESP-NOW ↔ OFF
@@ -64,7 +64,7 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   tone_out.h + tone_out_buzzer.cpp (Nesso, Plus2, Plus: LEDC) / tone_out_m5speaker.cpp (StickS3, Cardputer)  # トーン出力
   net.h / net.cpp / net_internal.h   # 無線の共通部 (受信キュー・統計・ロス注入・無線の種類の振り分け)
   net_espnow.cpp        # ESP-NOW 送受信 (ボード共通)
-  net_lora.cpp          # LoRa 送受信 (Nesso N1 のみ。専用タスク、キャリアセンス・休止、送信時刻の付け替え)
+  net_lora.cpp          # LoRa 送受信 (Nesso N1 と Cardputer ADV + Cap LoRa-1262。専用タスク、キャリアセンス・休止、送信時刻の付け替え)
   ui.h/.cpp             # 画面 (メイン/設定) の描画とボタン・タッチ入力の解釈 (ボード共通)
   hw.h + hw_nesso.cpp / hw_m5stick.cpp (StickS3, Plus2, Plus, Cardputer: M5Unified)   # 画面デバイス・ボタン・タッチ・電池
   keyboard_cardputer.cpp  # Cardputer のキーボード (hw::readKey。他のボードでは空の実装)
@@ -143,7 +143,7 @@ offset size field
 - 再生時刻が既に過去になっていた遷移 (遅延が大きすぎた) は、即時適用しつつ遅延超過としてカウントする
 - 長時間運転でのクロックドリフトに耐えること (offset の緩やかな追従)
 
-### 4.6 LoRa (Nesso N1 のみ, 2026-10-30 追加)
+### 4.6 LoRa (Nesso N1 / Cardputer ADV + Cap LoRa-1262, 2026-10-30 追加, 2026-11-03 変更)
 §4.1〜4.5 の方式 (状態+遷移履歴の定期送信、ジッタバッファ、ウォッチドッグ) はそのまま。送り方だけが違う。
 - **法令:** 日本の 920MHz 帯 特定小電力無線局 (20mW 以下)。Nesso N1 は技適取得済み (本体裏に技適マーク、販売店
   スイッチサイエンスの説明。ユーザー確認済み)。ユーザーの指示は「920MHz 帯で 20mW なら問題ない」。
@@ -154,13 +154,18 @@ offset size field
   | 128µs〜5ms 未満 | 400ms 以下 | 2ms 以上 | 360 秒 (10%) 以下 |
   単位チャネル 200kHz (中心 920.6 + 0.2k MHz)、最大 5 チャネル結束。**5ms の区分を使う** (総和の管理が要らない)。
   キャリアセンスレベル -80dBm (給電線入力点) は記憶による値で、原文では未確認
-- **パラメータ (config.h の LORA_*):** SF5 / BW500kHz (単位チャネル 3 つの結束) / CR4/5 / 13dBm / プリアンブル 8 /
-  sync 0x12 / TCXO 3.0V。チャンネル n の中心 = 920.8 + 0.6(n-1) MHz (CH1..CH8 = 920.8..925.0)。
-  キャリアセンス 5.2ms、休止 52ms (余裕を持たせた値)
+- **Cap LoRa-1262 の技適 (2026-11-03 に証明書 PDF で確認):** 工事設計認証 211-251216 (BACL, 2026-02-12)。
+  **F1D, 922.0〜923.4 MHz (0.2 MHz, 8 CH), 1.5〜5.0 mW**、ダイポール 2.14dBi。Cap 本体に技適マークあり (ユーザー確認)。
+  この範囲に収めるため、ユーザーの選択で **全局 (Nesso も) の LoRa を Cap の範囲に合わせた** (2026-11-03。
+  それまでは SF5 / BW500 / 920.8 + 0.6(n-1) MHz)。Nesso N1 の技適の範囲 (証明書) は未確認
+- **パラメータ (config.h の LORA_*):** SF5 / **BW125kHz** (単位チャネル 1 つ) / CR4/5 / プリアンブル 8 / sync 0x12 /
+  TCXO 3.0V。出力は Nesso 13dBm (LORA_POWER_DBM_NESSO)、Cap 5dBm (約 3.2mW, LORA_POWER_DBM_CAP)。
+  チャンネル n の中心 = **922.0 + 0.2(n-1) MHz (CH1..CH8 = 922.0..923.4)**。キャリアセンス 5.2ms、休止 52ms (余裕を持たせた値)。
+  **Cap ではこの周波数・帯域・出力を変えないこと** (技適の範囲外になる)
 - **送信:** engine は ESP-NOW と同じく 20ms ごと (遷移時は即時) にパケットを `net::send` に置く。LoRa タスクは
   休止とキャリアセンスが明けた時点の最新の 1 個だけを送り、送信直前に `restampPacket` で txMs と age を付け替え、
   `setPacketSeq` で通番を実際の送信順に振り直す (振り直さないと受信側が未送信分をロスと数える)。
-  実効の送信間隔は約 62ms。アイドルのハートビートは 1000ms (`LORA_TX_INTERVAL_IDLE_MS`)
+  実効の送信間隔は約 82ms (送信時間 約 25ms + 休止 52ms + キャリアセンス 5.2ms。BW500 のときは約 62ms)。アイドルのハートビートは 1000ms (`LORA_TX_INTERVAL_IDLE_MS`)
 - **フレーム:** [送信元 MAC 6 バイト][cw パケット] (LoRa には送信元アドレスが無いため)。全局が同じ周波数で
   ブロードキャストする対等な関係 (ユーザーの要望)
 - **受信:** ジッタ遅延の既定は 250ms (`LORA_JITTER_DELAY_MS`, Preferences のキーは "ljitter")。ウォッチドッグは
@@ -360,6 +365,18 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - 実機: ADV ⇔ StickS3 の ESP-NOW 双方向で PARIS / CQ TEST を再現 (±1ms)、デコード誤りなし。`output` コマンドを確認
   - ユーザー確認済み (2026-11-01): 画面、スピーカーの音、ヘッドフォン (差すとスピーカーが止まる・PHONES の音量段階は適切)、
     キーボードでの送信と設定画面の操作、Grove のキー・パドル、電池でのスリープと G0 での復帰
+- Cap LoRa-1262 (Cardputer ADV 用, 2026-11-03 調査・実機確認):
+  - 資料: https://docs.m5stack.com/en/cap/Cap_LoRa-1262 、回路図 U214-sche-Cap-LoRa1262_SCH_V1.1 と内部の Stamp LoRa-1262 Mini の
+    回路図。EXT 14 ピン (Cap-Bus) で接続。初代 Cardputer には EXT バスが無いので付けられない
+  - SPI: SCK G40 / MISO G39 / MOSI G14 (microSD と共有, SD の CS は G12 → HIGH にしておく)。NSS G5, DIO1(IRQ) G4, NRST G3, BUSY G6。
+    画面は SPI3_HOST (G35/G36) なので別バス → LoRa 用に `SPIClass(FSPI)` を自前で begin し、lockBus は不要
+  - アンテナスイッチ FM8625H: VDD = Cap の PI4IOE5V6408 (0x43, 内部 I2C = M5.In_I2C, G8/G9) の P0 (SX_ANT_SW)、
+    CTRL = SX1262 の DIO2 → Nesso と同じく `setDio2AsRfSwitch(true)`。TCXO 3.0V (DIO3)。外付け LNA は無い (RSSI 補正 0)
+  - 検出: ADV (hw::hasPhoneJack) かつ 0x43 のエキスパンダが応答したら LoRa あり (net_lora.cpp の probe)。初代では
+    G8/G9 がキーボードのマトリクスなので I2C を触らない
+  - 同梱の GPS (ATGM336H, UART G13/G15) は使っていない
+  - 実機 (2026-11-03, 机上): ADV ⇔ Nesso の LoRa 双方向で PARIS 20WPM / CQ TEST を再現 (60/180/420ms、まれに +1〜7ms)、
+    デコード誤りなし、ロス 0.4〜0.7%。送信時間 約 25.8ms/パケット (air/sent の実測)
 - LoRa (Nesso N1, 2026-10-30 調査・実機確認):
   - SX1262。SPI は画面と共有 (SCK=20, MOSI=21, MISO=22)。CS=GPIO23 (`LORA_CS`), BUSY=GPIO19, DIO1=GPIO15 (`LORA_IRQ`),
     NRST は無し (RADIOLIB_NC)。**画面 (loop) と LoRa タスクが同じ SPI を使うので `hw::lockBus()` で排他している**
@@ -447,6 +464,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 17. (2026-11-01) 公開準備: コメント・文字列を英語 (US-ASCII のみ) に、4 スペース・80 桁に整形 (clang-format)、
     README を英語 (README.md) と日本語 (README.ja.md) に、LICENSE (MIT) を追加。コードの中身は変えていない
     (コメントを除いたトークン列を整形前と比較して確認。違いは長い文字列の分割と board.h の #error の文言だけ)
+18. (2026-11-03) Cardputer ADV + Cap LoRa-1262 で LoRa に対応。Cap の技適の範囲に合わせて全局の LoRa を
+    922.0〜923.4MHz / BW125 に変更 (§4.6, §10)
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
@@ -454,6 +473,9 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - 6 機種 (Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus / Cardputer / Cardputer ADV) すべてユーザーが実機で動作確認済み
 
 ### 書き込んであるビルド (2026-11-01)
+- (2026-11-03) Cardputer ADV と Nesso 1 台 (/dev/cu.usbmodem101 に接続していた方) に LoRa 922MHz 版を書き込み済み
+  (未コミットの状態のビルド)。**LoRa の周波数・帯域を変えたので、もう 1 台の Nesso も書き直さないと LoRa で通信できない**。
+  ADV の RADIO は試験で LoRa にしたまま
 - 全 11 台 (Nesso ×2, StickS3, Plus2 ×2, Plus ×2, Cardputer, Cardputer ADV) にコミット 685479e のビルドを書き込み済み。
   スプラッシュの表示を StickS3・Nesso・Plus2・Plus・Cardputer (初代・ADV) の全機種でユーザーが確認済み
 

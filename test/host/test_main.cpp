@@ -350,8 +350,8 @@ struct ChannelOpts {
     // and send (same as net_lora.cpp). Receiver jitter delay and idle interval
     // also use the LoRa values
     bool lora = false;
-    int loraToaMs = 8;  // airtime (SF5/BW500, ~7.3ms for 29 bytes)
-    int csBusyMax = 0;  // time spent waiting on carrier sense 0..csBusyMax ms
+    int loraToaMs = 25;  // airtime (SF5/BW125, ~24.9ms for 35 bytes)
+    int csBusyMax = 0;   // time spent waiting on carrier sense 0..csBusyMax ms
 };
 
 struct SimResult {

@@ -7,7 +7,7 @@
 //   M5StickC Plus    : m5stack:esp32:m5stack_stickc_plus   ->
 //   ARDUINO_M5STACK_STICKC_PLUS M5Stack Cardputer:
 //   m5stack:esp32:m5stack_cardputer     -> ARDUINO_M5STACK_CARDPUTER (original
-//   model. v1.1 / ADV not supported)
+//   and ADV; same build, ADV detected at run time. v1.1 not tested)
 #pragma once
 
 #if defined(ARDUINO_ARDUINO_NESSO_N1)

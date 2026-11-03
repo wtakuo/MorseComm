@@ -3,7 +3,7 @@
 Japanese version: [README.ja.md](README.ja.md)
 
 MorseComm transmits Morse code keying in both directions between Arduino Nesso N1 (ESP32-C6), M5StickS3 / Cardputer (ESP32-S3), and M5StickC Plus2 / M5StickC Plus (ESP32) boards, using ESP-NOW (no Wi-Fi router needed).
-Between Nesso N1 boards, **LoRa (920 MHz band)** can be used instead of ESP-NOW ([LoRa](#lora-nesso-n1-only)). Both are peer-to-peer, with no distinction between master and slave units.
+Between Nesso N1 boards and Cardputer ADVs with the Cap LoRa-1262, **LoRa (920 MHz band)** can be used instead of ESP-NOW ([LoRa](#lora-nesso-n1--cardputer-adv--cap-lora-1262)). Both are peer-to-peer, with no distinction between master and slave units.
 With the radio set to **OFF**, no radio waves are emitted, and a single unit can be used for Morse sending practice (the sidetone and decoding of the sent text still work).
 There is also a **terminal mode** in which you type characters in a terminal on a PC to send them, and received characters are shown in the terminal ([Terminal mode](#terminal-mode-term)).
 
@@ -41,7 +41,7 @@ The M5Stack Cardputer (original) and Cardputer ADV are as follows. They run **th
 | Keyboard | 56 keys (GPIO matrix) | 56 keys (TCA8418, I2C) |
 | Screen | 1.14" 240x135, no touch | Same |
 | Buttons | One button, G0 (BtnA), + keyboard | Same |
-| Radio | ESP-NOW / OFF | Same |
+| Radio | ESP-NOW / OFF | ESP-NOW / LoRa (with the Cap LoRa-1262) / OFF |
 | Power management | None (instead of USB power, it detects a USB serial connection to a PC) | Same |
 
 **Cardputer ADV headphones:** When headphones are plugged in, the hardware mutes the speaker (the software cannot
@@ -144,7 +144,7 @@ The settings items are as follows (in on-screen order). Changing a frequency or 
 
 | Item | Value |
 |---|---|
-| RADIO | ESP-NOW / LoRa (Nesso N1 only) / OFF (no radio emission). A value different from the one in use is marked with `*`, and the unit restarts and switches when you leave the settings screen |
+| RADIO | ESP-NOW / LoRa (Nesso N1, Cardputer ADV + Cap LoRa-1262) / OFF (no radio emission). A value different from the one in use is marked with `*`, and the unit restarts and switches when you leave the settings screen |
 | MODE | STRAIGHT / IAMBIC_A / IAMBIC_B |
 | PADDLE | NORMAL / SWAPPED (swap DIT and DAH) |
 | SPEED | 5 to 50 WPM (keyer speed) |
@@ -211,7 +211,7 @@ Serial output is in English (US-ASCII) only, with CR LF line endings.
 | Command | Description |
 |---|---|
 | `ch N` | Communication channel (1 to 8) |
-| `radio espnow\|lora\|off` | Radio type (LoRa is Nesso N1 only; off emits no radio waves). Saves and restarts |
+| `radio espnow\|lora\|off` | Radio type (LoRa: Nesso N1, Cardputer ADV + Cap LoRa-1262; off emits no radio waves). Saves and restarts |
 | `mode straight\|iambic_a\|iambic_b` | Key mode |
 | `wpm N` | Keyer speed |
 | `side N` / `side on` / `side off` | Sidetone frequency / on and off |
@@ -266,18 +266,23 @@ Instead, this scheme **keeps sending the current state and the recent transition
 - **Multiple stations:** The receiver keeps separate playback processing (described below) and a separate decoder for each sender MAC address (up to 6 stations). Sound is the OR of all stations, and decoded characters from any station appear in the received text.
 - **Switching channels:** When the channel is switched, playback of all previous stations is stopped.
 
-### LoRa (Nesso N1 only)
+### LoRa (Nesso N1 / Cardputer ADV + Cap LoRa-1262)
 
-The Nesso N1 has a LoRa radio (Semtech SX1262). Switch to it with RADIO on the settings screen or with `radio lora`.
+The Nesso N1 has a LoRa radio (Semtech SX1262). The Cardputer ADV can use LoRa with the
+[Cap LoRa-1262](https://docs.m5stack.com/en/cap/Cap_LoRa-1262) (also SX1262) attached to its EXT bus; it is detected at startup
+(the original Cardputer has no bus for it). Switch to it with RADIO on the settings screen or with `radio lora`.
+Nesso N1 and Cardputer ADV stations can talk to each other over LoRa.
 The packet contents and receiver processing are the same as for ESP-NOW; only the way packets are sent is different.
 
 - **Radio conditions:** Follows the category with carrier sense of 5 ms or more for Japan's 920 MHz band specified low-power radio stations (20 mW or less, ARIB STD-T108).
-  - Antenna power 13 dBm (20 mW).
+  - Antenna power: Nesso N1 13 dBm (20 mW); Cap LoRa-1262 5 dBm (about 3 mW).
+  - The frequencies, bandwidth and power are within the type approval of the Cap LoRa-1262 (MIC 211-251216:
+    922.0-923.4 MHz, 0.2 MHz x 8 channels, 1.5-5.0 mW). Do not change them for the Cap.
   - Carrier sense for 5 ms before transmitting; if a signal of -80 dBm or more is present, wait a little and retry.
-  - After each transmission (about 7 ms), pause for at least 50 ms. This category has no limit on the total transmission time per hour.
-- **Modulation:** LoRa SF5 / 500 kHz bandwidth (3 bonded unit channels) / CR 4/5. The airtime of a 29-byte packet is about 6 ms.
-- **Channels and frequencies:** The center frequency of channel n is `920.8 + 0.6 x (n - 1)` MHz (CH1 = 920.8 MHz to CH8 = 925.0 MHz). As with ESP-NOW, the channel number is also put in the packet.
-- **Send interval:** Because of the required pause, the minimum interval is about 60 ms (ESP-NOW: 20 ms). The engine builds packets to send the same way as for ESP-NOW, but the LoRa task sends only the latest one at the moment it is allowed to transmit. Just before sending, it re-stamps the send time and the elapsed times in the history, so the contents match the state at that moment. The idle heartbeat is every 1 second.
+  - After each transmission (about 25 ms), pause for at least 50 ms. This category has no limit on the total transmission time per hour.
+- **Modulation:** LoRa SF5 / 125 kHz bandwidth (one 200 kHz unit channel) / CR 4/5. The airtime of a 35-byte frame is about 25 ms.
+- **Channels and frequencies:** The center frequency of channel n is `922.0 + 0.2 x (n - 1)` MHz (CH1 = 922.0 MHz to CH8 = 923.4 MHz). As with ESP-NOW, the channel number is also put in the packet.
+- **Send interval:** Because of the required pause, the minimum interval is about 80 ms (ESP-NOW: 20 ms). The engine builds packets to send the same way as for ESP-NOW, but the LoRa task sends only the latest one at the moment it is allowed to transmit. Just before sending, it re-stamps the send time and the elapsed times in the history, so the contents match the state at that moment. The idle heartbeat is every 1 second.
 - **Sender:** LoRa has no source address, so the sender's MAC address (6 bytes) is prepended to the packet. All stations broadcast to each other on the same frequency as equal peers.
 - **Latency:** The default jitter delay is 250 ms (ESP-NOW: 150 ms). It takes about 0.26 seconds from pressing the key until the other station's tone sounds. It can be changed with `jitter`, but shortening it increases late arrivals (decoding errors) when packets are lost.
 - **Received signal strength:** The receive path has an LNA (about 21 dB), so 20 dB is subtracted from the SX1262 RSSI and the result is shown as the value at the antenna. When units sit side by side on a desk, it saturates and shows about -20 dBm.
@@ -301,6 +306,7 @@ Even if a screen transfer takes over ten milliseconds, keying timing is not dist
 The ESP-NOW receive callback only records the receive time and puts the packet in a queue; processing is done in the engine task.
 For LoRa, a dedicated task (`net_lora.cpp`) handles carrier sense, sending, and receiving, and puts received packets in the same queue.
 On the Nesso N1, the screen and LoRa share the same SPI bus, so screen transfers and LoRa operations are mutually exclusive (`hw::lockBus`).
+On the Cardputer ADV, the Cap uses its own SPI bus (shared only with the microSD slot), and the RF switch is powered through the Cap's IO expander (PI4IOE5V6408, 0x43).
 
 ### Files
 
@@ -322,7 +328,7 @@ On the Nesso N1, the screen and LoRa share the same SPI bus, so screen transfers
 | `power.h`, `power_nesso.cpp`, `power_sticks3.cpp`, `power_stickc.cpp` (Plus2 / Plus), `power_cardputer.cpp` | USB power detection, deep sleep (per board) |
 | `net.h`, `net.cpp`, `net_internal.h` | Common radio code (receive queue, statistics, loss injection, radio type switching) |
 | `net_espnow.cpp` | ESP-NOW (common to all boards) |
-| `net_lora.cpp` | LoRa (Nesso N1 only. Carrier sense, pause, re-stamping of send times) |
+| `net_lora.cpp` | LoRa (Nesso N1, Cardputer ADV + Cap LoRa-1262. Carrier sense, pause, re-stamping of send times) |
 | `peers.h` | Reception from multiple stations (per-sender playback and decoding) |
 | `test/host/` | Unit tests and loss simulation that run on a Mac |
 
@@ -349,7 +355,7 @@ In addition, a simulation feeds 60 seconds of random keying through the channel 
 - Delay variation of 0 to 80 ms / 250 ms
 - Duplicates
 - Clock drift and wrap-around
-- LoRa send conditions (only the latest packet sent about every 60 ms, waiting on carrier sense) and loss
+- LoRa send conditions (only the latest packet sent about every 80 ms, waiting on carrier sense) and loss
 
 The tests confirm that the key never gets stuck down under any condition, and that the transition sequence and timing match whenever the loss is within the history length.
 
@@ -361,8 +367,8 @@ On real hardware, the same can be checked with test mode (`test on PARIS`) and l
 - If two stations transmit at the same time on the same channel, their tones overlap, just as with real radio. The text is decoded per station, but characters are shown interleaved.
 - Up to 6 stations can be tracked at once on one channel. Beyond that, the station not heard from for the longest time is replaced.
 - When your station and another station are DOWN at the same time, the sidetone frequency is played.
-- With LoRa, if packet loss continues 4 or more times in a row (an outage of about 0.3 seconds), late arrivals occur and decoding may be wrong. This is because the send interval is longer than with ESP-NOW.
-- LoRa is half-duplex, so nothing can be received while your own station is transmitting (about 6 ms).
+- With LoRa, if packet loss continues 3 or more times in a row (an outage of about 0.3 seconds), late arrivals occur and decoding may be wrong. This is because the send interval is longer than with ESP-NOW.
+- LoRa is half-duplex, so nothing can be received while your own station is transmitting (about 25 ms).
 - ESP-NOW stations and LoRa stations cannot communicate with each other. Everyone must use the same radio type and the same channel.
 
 ## License

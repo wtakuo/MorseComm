@@ -75,7 +75,8 @@ constexpr int32_t SENDER_RESTART_BACKSTEP_MS =
 
 // ---- Radio type (switched in settings; switching causes a restart) ----
 constexpr uint8_t RADIO_ESPNOW = 0;
-constexpr uint8_t RADIO_LORA = 1;  // Nesso N1 only (SX1262)
+// Nesso N1 and Cardputer ADV + Cap LoRa-1262 (SX1262)
+constexpr uint8_t RADIO_LORA = 1;
 constexpr uint8_t RADIO_OFF =
     2;  // no RF emission (for solo sending practice; does not receive either)
 
@@ -83,20 +84,26 @@ constexpr uint8_t RADIO_OFF =
 constexpr uint8_t ESPNOW_CHANNEL =
     1;  // Wi-Fi channel (fixed, common to all stations)
 
-// ---- LoRa (Japan 920MHz band specified low-power radio station, 20mW or less.
-// ARIB STD-T108 / Radio Equipment Regulations) ---- Uses the carrier-sense >=
-// 5ms category: one transmission <= 4 s, pause after transmission >= 50ms, no
-// limit on the total per hour. The 500kHz bandwidth is a bundle of 3 unit
-// channels (200kHz). Center frequency of communication channel n = BASE + STEP
-// * (n - 1) (n=1: bundle of 920.6/920.8/921.0 MHz -> center 920.8MHz, n=8:
-// 925.0MHz)
-constexpr float LORA_FREQ_BASE_MHZ = 920.8f;
-constexpr float LORA_FREQ_STEP_MHZ = 0.6f;
-constexpr float LORA_BW_KHZ = 500.0f;
+// ---- LoRa (Japan 920MHz band specified low-power radio station.
+// ARIB STD-T108 / Radio Equipment Regulations) ----
+// Uses the carrier-sense >= 5ms category: one transmission <= 4 s, pause after
+// transmission >= 50ms, no limit on the total per hour.
+// The channels and power are chosen to stay within the type approval (MIC
+// 211-251216) of the Cap LoRa-1262 (Cardputer ADV): 922.0-923.4 MHz, 0.2 MHz
+// x 8 channels, 1.5-5.0 mW. All stations (Nesso N1 too) must use the same
+// frequency, bandwidth and SF to talk to each other.
+// Center frequency of communication channel n = BASE + STEP * (n - 1)
+// (n=1: 922.0MHz, n=8: 923.4MHz; one 200kHz unit channel each)
+constexpr float LORA_FREQ_BASE_MHZ = 922.0f;
+constexpr float LORA_FREQ_STEP_MHZ = 0.2f;
+constexpr float LORA_BW_KHZ = 125.0f;  // fits in one 200kHz unit channel
 constexpr uint8_t LORA_SF = 5;
 constexpr uint8_t LORA_CR = 5;            // 4/5
 constexpr uint8_t LORA_SYNC_WORD = 0x12;  // private
-constexpr int8_t LORA_POWER_DBM = 13;     // 20mW (upper limit of antenna power)
+// Nesso N1: 20mW (upper limit of the 20mW class)
+constexpr int8_t LORA_POWER_DBM_NESSO = 13;
+// Cap LoRa-1262: about 3.2mW (within its approved 1.5-5.0mW)
+constexpr int8_t LORA_POWER_DBM_CAP = 5;
 constexpr uint16_t LORA_PREAMBLE = 8;
 constexpr float LORA_TCXO_V = 3.0f;
 constexpr uint32_t LORA_CS_US =
@@ -105,16 +112,16 @@ constexpr uint32_t LORA_PAUSE_MS =
     52;  // pause after transmission (regulation: 50ms or more)
 constexpr int LORA_CS_LEVEL_DBM =
     -80;  // carrier sense level (at the feed line input point)
-// Gain of the receive-path LNA (SGM13005L4, about 21dB). The SX1262 RSSI reads
-// high by this amount, so it is subtracted. Set slightly smaller than the
-// datasheet value so that carrier sense does not become too lenient
+// Gain of the Nesso N1 receive-path LNA (SGM13005L4, about 21dB). The SX1262
+// RSSI reads high by this amount, so it is subtracted. Set slightly smaller
+// than the datasheet value so that carrier sense does not become too lenient
 constexpr int LORA_LNA_GAIN_DB = 20;
 constexpr uint32_t LORA_TX_TIMEOUT_MS =
     100;  // recovery when the TX-done interrupt does not arrive
 constexpr uint32_t LORA_TX_INTERVAL_IDLE_MS =
     1000;  // idle heartbeat (longer, to leave the channel free)
 constexpr uint32_t LORA_JITTER_DELAY_MS =
-    250;  // the transmit interval is long (about 60ms), so the jitter delay is
+    250;  // the transmit interval is long (about 80ms), so the jitter delay is
           // also longer
 
 // ---- Communication channel (like a radio's "channel". Carried in the packet;
