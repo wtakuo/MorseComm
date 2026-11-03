@@ -344,7 +344,7 @@ void printHelp() {
         {"output speaker|phones", "sound output (Cardputer ADV only)"},
         {"jitter N", "jitter buffer delay (ms)"},
         {"term", "terminal mode: type to send"},
-        {"msg [TEXT]", "show / set the message (KEY1 long press)"},
+        {"msg [TEXT]", "show / set the message (BtnA long press)"},
         {"test on [TEXT]", "send TEXT repeatedly at the current WPM"},
         {"test off", "stop the test"},
         {"loss N", "drop N% of sent packets (test)"},

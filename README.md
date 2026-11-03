@@ -21,13 +21,13 @@ The following five models are supported. Different models can communicate with e
 | Item | Arduino Nesso N1 | M5StickS3 | M5StickC Plus2 | M5StickC Plus |
 |---|---|---|---|---|
 | MCU | ESP32-C6 | ESP32-S3 | ESP32 (PICO-V3-02) | ESP32 (PICO-D4) |
-| Straight key | GPIO4 (Grove pin 4) | GPIO10 (Grove pin 4) | G33 (Grove white wire) | G33 (Grove white wire) |
-| Paddle | DIT = GPIO4, DAH = GPIO5 | DIT = GPIO10, DAH = GPIO9 | DIT = G33, DAH = G32 (yellow wire) | DIT = G33, DAH = G32 (yellow wire) |
-| Sound | Built-in buzzer (GPIO11, PWM) | Built-in speaker (ES8311, I2S) | Built-in buzzer (G2, PWM) | Built-in buzzer (G2, PWM) |
+| Straight key | GPIO 4 (Grove pin 4) | GPIO 10 (Grove pin 4) | GPIO 33 (Grove pin 4) | GPIO 33 (Grove pin 4) |
+| Paddle | DIT = GPIO 4 (Grove pin 4), DAH = GPIO 5 (Grove pin 3) | DIT = GPIO 10 (Grove pin 4), DAH = GPIO 9 (Grove pin 3) | DIT = GPIO 33 (Grove pin 4), DAH = GPIO 32 (Grove pin 3) | DIT = GPIO 33 (Grove pin 4), DAH = GPIO 32 (Grove pin 3) |
+| Sound | Built-in buzzer (GPIO 11, PWM) | Built-in speaker (ES8311, I2S) | Built-in buzzer (GPIO 2, PWM) | Built-in buzzer (GPIO 2, PWM) |
 | Screen | 1.14" 240x135, touch | 1.14" 240x135, no touch | 1.14" 240x135, no touch | 1.14" 240x135, no touch |
-| Buttons | KEY1 (front), KEY2 (side) | BtnA (front), BtnB (side) | BtnA (front), BtnB (side) | BtnA (front), BtnB (side) |
+| Buttons | BtnA (front), BtnB (side) | BtnA (front), BtnB (side) | BtnA (front), BtnB (side) | BtnA (front), BtnB (side) |
 | Radio | ESP-NOW / LoRa (SX1262) / OFF | ESP-NOW / OFF | ESP-NOW / OFF | ESP-NOW / OFF |
-| Power management | AW32001 + BQ27220 | M5PM1 | None (power held by G4) | AXP192 |
+| Power management | AW32001 + BQ27220 | M5PM1 | None (power held by GPIO 4) | AXP192 |
 | USB serial | USB CDC | USB CDC | USB-UART (CH9102) | USB-UART (FTDI) |
 
 The M5Stack Cardputer (original) and Cardputer ADV are as follows. They run **the same build**, which detects which one it is at startup
@@ -36,11 +36,12 @@ The M5Stack Cardputer (original) and Cardputer ADV are as follows. They run **th
 | Item | Cardputer (original) | Cardputer ADV |
 |---|---|---|
 | MCU | ESP32-S3 (StampS3) | ESP32-S3 (StampS3A) |
-| Straight key / paddle | Grove G1 (white wire) = straight / DIT, G2 (yellow wire) = DAH | Same |
+| Straight key | GPIO 1 (Grove pin 4) | Same |
+| Paddle | DIT = GPIO 1 (Grove pin 4), DAH = GPIO 2 (Grove pin 3) | Same |
 | Sound | Built-in speaker (NS4168, I2S) | Built-in speaker + **headphone jack** (ES8311 + NS4150B) |
 | Keyboard | 56 keys (GPIO matrix) | 56 keys (TCA8418, I2C) |
 | Screen | 1.14" 240x135, no touch | Same |
-| Buttons | One button, G0 (BtnA), + keyboard | Same |
+| Buttons | BtnA (GPIO 0) only, plus the keyboard | Same |
 | Radio | ESP-NOW / OFF | ESP-NOW / LoRa (with the Cap LoRa-1262) / OFF |
 | Power management | None (instead of USB power, it detects a USB serial connection to a PC) | Same |
 
@@ -98,7 +99,7 @@ The same information also appears in the serial startup message (`build=... comm
 ```
 [CH3] x2 -45dBm L0% R0 W0       87%   <- channel / station count / link status / battery (+ = charging)
 RX 20 wpm                        [#]   <- receive (other station's estimated speed, key state)
-CQ CQ DE JA1ABC K                       (green: received text, 3 lines)
+CQ CQ DE JM1TEU K                       (green: received text, 3 lines)
 TX 18 wpm                        [#]   <- send (your estimated speed)
 TU 73                                   (yellow: sent text, 2 lines)
 ```
@@ -118,27 +119,35 @@ The prosign `...-.-`, sent continuously without a character gap, is shown as `[S
 
 ### Buttons
 
-KEY1 is the front button (BtnA on the StickS3), and KEY2 is the side button (BtnB on the StickS3).
+On the Nesso N1, M5StickS3, M5StickC Plus2 and M5StickC Plus, BtnA is the front button and BtnB is the side button.
+(The Cardputer has only BtnA and is operated mainly with the keyboard: see [Cardputer keyboard](#cardputer-keyboard).)
 
-| Screen | Action | Result |
-|---|---|---|
-| Main | KEY1 (front) short press | Advance the channel by 1 (after 8 comes 1). The new number is shown large in the center of the screen |
-| Main | KEY1 long press | Send the stored message once (default `VVV VVV`; set it with `msg`). It is queued after any text still waiting to be sent |
-| Main | KEY2 (side) short press | Open the settings screen |
-| Main | KEY2 long press | Clear the displayed text |
-| Settings (Nesso) | KEY1 short press / KEY2 short press | Next item / previous item |
-| Settings (Nesso) | Touch an item | Select that item |
-| Settings (Nesso) | Touch the **up** / **down** triangle on the right | Increase / decrease the value (holding it changes the value continuously) |
-| Settings (Nesso) | Long press KEY1 or KEY2 | Leave the settings screen (saves) |
+Main screen:
 
-The M5StickS3 has no touch panel, so its settings screen is operated in two modes, "select" and "change". The top line shows the current role of each button.
+| Action | Result |
+|---|---|
+| BtnA short press | Advance the channel by 1 (after 8 comes 1). The new number is shown large in the center of the screen |
+| BtnA long press | Send the stored message once (default `VVV VVV`; set it with `msg`). It is queued after any text still waiting to be sent |
+| BtnB short press | Open the settings screen |
+| BtnB long press | Clear the displayed text |
 
-| Mode | BtnA (front) | BtnB (side) | Long press |
+Settings screen on the Nesso N1 (touch panel):
+
+| Action | Result |
+|---|---|
+| BtnA short press / BtnB short press | Next item / previous item |
+| Touch an item | Select that item |
+| Touch the **up** / **down** triangle on the right | Increase / decrease the value (holding it changes the value continuously) |
+| Long press BtnA or BtnB | Leave the settings screen (saves) |
+
+The M5StickS3, M5StickC Plus2 and M5StickC Plus have no touch panel, so their settings screen is operated in two modes, "select" and "change". The top line shows the current role of each button.
+
+| Mode | BtnA short press | BtnB short press | Long press (BtnA or BtnB) |
 |---|---|---|---|
 | Select | Next item | Start changing that item (the item turns orange) | Leave the settings screen (saves) |
 | Change | Increase the value (+) | Decrease the value (-) | Return to select mode |
 
-On both models, the settings screen automatically returns to the main screen after 30 seconds without any operation.
+On all models, the settings screen automatically returns to the main screen after 30 seconds without any operation.
 
 The settings items are as follows (in on-screen order). Changing a frequency or the volume plays that sound briefly.
 
@@ -153,7 +162,7 @@ The settings items are as follows (in on-screen order). Changing a frequency or 
 | VOLUME | 0 to 5 (0 is mute. On the Cardputer ADV, separate for each OUTPUT) |
 | SIDE FREQ | Sidetone frequency (300 to 1500 Hz, in 50 Hz steps) |
 | RX FREQ | Receive tone frequency |
-| DEFAULTS | Restore all settings to their defaults. Pressing the up or down triangle (+ or - in change mode on the StickS3 / Plus2) once shows `PRESS AGAIN`, and pressing again within 3 seconds executes it (`RESTORED`). Holding it down does not execute it |
+| DEFAULTS | Restore all settings to their defaults. Pressing the up or down triangle (+ or - in change mode on the StickS3 / StickC Plus2 / StickC Plus) once shows `PRESS AGAIN`, and pressing again within 3 seconds executes it (`RESTORED`). Holding it down does not execute it |
 
 Defaults: RADIO = ESP-NOW, channel = 1, MODE = IAMBIC_B, PADDLE = NORMAL, SPEED = 20 WPM, SIDETONE = ON, VOLUME = 3, SIDE FREQ = 700 Hz, RX FREQ = 600 Hz (the jitter delay is also reset to its default).
 If the radio type changes, the unit restarts and switches when you leave the settings screen.
@@ -161,7 +170,7 @@ If the radio type changes, the unit restarts and switches when you leave the set
 There are 9 items; those that do not fit on the screen are reached by scrolling.
 
 When RADIO is OFF, neither Wi-Fi nor LoRa is initialized, so no radio waves are emitted at all (and nothing is received).
-Keying, sidetone, decoding display of sent text, and auto sleep work as usual. Channels are meaningless, so KEY1 (channel switching) has no effect.
+Keying, sidetone, decoding display of sent text, and auto sleep work as usual. Channels are meaningless, so BtnA short press (channel switching) has no effect.
 
 ### Cardputer keyboard
 
@@ -174,13 +183,13 @@ On the Cardputer, characters typed on the keyboard are sent directly (at the SPE
 | Main | space / enter / tab | Word gap |
 | Main | Enclose in `[` `]` | Send continuously without character gaps (e.g. `[SK]`) |
 | Main | fn + left (`,`) / fn + right (`/`) | Go back / advance one channel |
-| Main | fn + down (`.`) | Send the stored message once (same as KEY1 long press on the other boards) |
+| Main | fn + down (`.`) | Send the stored message once (same as BtnA long press on the other boards) |
 | Main | esc (fn + `` ` ``, or just `` ` ``) | Open the settings screen |
-| Main | G0 button short press / long press | Open the settings screen / clear the displayed text |
+| Main | BtnA short press / long press | Open the settings screen / clear the displayed text |
 | Settings | up / down (fn + `;` / `.`; fn is optional on the settings screen) | Previous / next item |
 | Settings | left / right (`,` / `/`) | Decrease / increase the value |
 | Settings | enter (OK) | Advance the value (DEFAULTS executes when pressed twice) |
-| Settings | esc, or the G0 button | Leave the settings screen (saves) |
+| Settings | esc, or BtnA | Leave the settings screen (saves) |
 
 While characters are being sent, key and paddle operation is ignored.
 
@@ -194,12 +203,12 @@ When running on battery (no USB power), the unit enters deep sleep and the scree
 
 From 10 seconds before sleeping, a `SLEEP in Ns` warning is shown on the top line. Operating a key or button during this time cancels the sleep.
 
-**Press the front or side button to wake up.** Waking up is a restart and takes about 1 second. Settings remain saved.
+**Press BtnA or BtnB to wake up** (BtnA on the Cardputer). Waking up is a restart and takes about 1 second. Settings remain saved.
 Nothing can be received during sleep (LoRa is also stopped). The unit does not sleep while on USB power.
 However, **the M5StickC Plus2 cannot detect USB power, so it sleeps after 3 minutes even when connected to USB** (wake with BtnA / BtnB).
-The Plus2 keeps the power hold pin (G4) HIGH during sleep, so the power does not turn off.
+The Plus2 keeps the power hold pin (GPIO 4) HIGH during sleep, so the power does not turn off.
 **The Cardputer cannot detect USB power, so it treats itself as "on USB power" only while it is communicating with a PC over USB serial**
-(when connected only to a charger, it sleeps after 3 minutes). Wake it with the G0 button (the keyboard does not wake it). The time can be changed with `SLEEP_TIMEOUT_MS` in `config.h`.
+(when connected only to a charger, it sleeps after 3 minutes). Wake it with BtnA (the keyboard does not wake it). The time can be changed with `SLEEP_TIMEOUT_MS` in `config.h`.
 
 ### Serial commands (115200 bps)
 
@@ -222,7 +231,7 @@ Serial output is in English (US-ASCII) only, with CR LF line endings.
 | `swap 0\|1` | Swap the paddle |
 | `jitter N` | Jitter buffer delay (ms; default ESP-NOW 150 / LoRa 250. Saved separately for each radio type) |
 | `term` | Terminal mode (see below). Exit with Ctrl-C |
-| `msg [TEXT]` | Show / set the message sent by KEY1 long press (fn + down on the Cardputer). Up to 64 Morse characters (`[SK]` style prosigns allowed); saved. Default `VVV VVV` |
+| `msg [TEXT]` | Show / set the message sent by BtnA long press (fn + down on the Cardputer). Up to 64 Morse characters (`[SK]` style prosigns allowed); saved. Default `VVV VVV` |
 | `test on [TEXT]` / `test off` | Test mode: keeps automatically keying TEXT at the current WPM. Enclosing in square brackets like `[SK]` sends without character gaps |
 | `loss N` | Loss injection: skip sending with probability N% |
 | `dropup 0\|1` | Loss injection: skip all packets whose key state is UP |
