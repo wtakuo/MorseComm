@@ -13,7 +13,7 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
 - 2台とも送信・受信の両方を行う (往復通信)
 - 無線は ESP-NOW が基本。Nesso N1 と Cap LoRa-1262 付き Cardputer ADV は LoRa (SX1262, 920MHz 帯) も選べる (設定の RADIO。2026-10-30 追加, 2026-11-03 ADV 対応, §4.6)
 - RADIO = OFF: 電波を出さない単独練習モード (ユーザー要望で追加)。Wi-Fi も LoRa も初期化せず、net::send は何もしない。
-  キー・サイドトーン・送信デコード・スリープは通常どおり。メイン画面は灰色の "OFF" / "RADIO OFF"、KEY1 (チャンネル) は無効。
+  キー・サイドトーン・送信デコード・スリープは通常どおり。メイン画面は灰色の "OFF" / "RADIO OFF"、BtnA (チャンネル) は無効。
   設定画面の RADIO は Nesso: ESP-NOW → LoRa → OFF、StickS3 / StickC Plus2: ESP-NOW ↔ OFF
 - 端末モード (`term`): PC のターミナルで打った文字をモールスで送り、受信文字を表示する (2026-10-31 追加)
 - 対応ボード: Arduino Nesso N1 / M5StickS3 / M5StickC Plus2 / M5StickC Plus / M5Stack Cardputer (初代) / Cardputer ADV
@@ -259,7 +259,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   FreeRTOS は 1000Hz ティック・シングルコア
 - 使用ライブラリ: `Arduino_Nesso_N1` 1.0.0 (依存: M5GFX 0.2.35, Arduino_BMI270_BMM150)。
   画面は ST7789 135x240 (`NessoDisplay`, LovyanGFX 互換 API)。`setRotation(1)` で 240x135 横長
-- ボタン: KEY1 / KEY2 は I2C の IO エキスパンダ (PI4IOE5V6408, 0x43) 経由。`digitalRead(KEY1)` で読める (押下=LOW)。
+- ボタン: BtnA (正面) / BtnB (側面)。ライブラリのピン名は KEY1 / KEY2 で、I2C の IO エキスパンダ (PI4IOE5V6408, 0x43) 経由。`digitalRead(KEY1)` で読める (押下=LOW)。
   `NessoDisplay::begin()` が INPUT_PULLUP に設定する。I2C なので loop() 側からのみ読む
 - Grove: GPIO5 = `GROVE_IO_0`, GPIO4 = `GROVE_IO_1`。`GROVE_POWER_EN` (エキスパンダ) を触らなくても
   INPUT_PULLUP + キー接点 → GND で読めることを実機で確認
@@ -269,7 +269,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - トーン出力の方法とピン: 内蔵ブザー `BEEP_PIN` = GPIO11 を LEDC PWM で駆動 (音量はデューティ比で5段階)。サイドトーンと受信トーンは別周波数、自局 DOWN 時はサイドトーン優先
 - タッチ: FT6x36 (0x38, `NessoTouch`)。生座標 (縦置き 135x240) → setRotation(1) の画面座標は「xy 入れ替え + y 反転」で正しいことを実機で確認 (config.h の TOUCH_*)
 - 電源: USB 給電は `digitalRead(VIN_DETECT)` (エキスパンダ 0x44 bit5) が HIGH、電池のみで LOW (どちらも実機で確認)。
-  ディープスリープからの復帰: KEY1/KEY2 (0x43 bit0/1) の割り込みを有効化 (0x11 = 0xFC) → エキスパンダの INT が
+  ディープスリープからの復帰: BtnA/BtnB (KEY1/KEY2, 0x43 bit0/1) の割り込みを有効化 (0x11 = 0xFC) → エキスパンダの INT が
   `SYS_IRQ` = GPIO3 (通常 High) → `esp_sleep_enable_ext1_wakeup_io(1<<3, ANY_LOW)`。実機で復帰を確認 (wake cause = EXT1)
 - 電池: `NessoBattery::getChargeLevel()` (BQ27220) で残量 %。`battery.begin()` は充電設定を書き換えるので呼んでいない
 - シリアル: USB CDC (115200)。`arduino-cli monitor` はパイプ経由だと何も出ないため、
@@ -338,7 +338,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   - キーボードの割り当て (README の表): メインは文字を g_typeBuf に積んで送る (端末モードと同じ StreamKeyer。engine は
     端末モードかどうかに関係なく常に g_typeBuf を送るようにした)、fn+←→ = チャンネル、esc / ` = 設定画面。
     設定画面は ↑↓ (; .) = 項目、←→ (, /) = 値、enter = 値を進める、esc = 抜ける。未送信の文字は TX の行に灰色で表示
-  - ボタンは G0 (BtnA) だけで、他機種の KEY2 の役 (短押し = 設定画面 / 長押し = テキスト消去)。設定画面では抜ける
+  - ボタンは BtnA (GPIO 0) だけで、他機種の BtnB の役 (短押し = 設定画面 / 長押し = テキスト消去)。設定画面では抜ける
   - 音: NS4168 (I2S) を M5.Speaker で (StickS3 と同じ tone_out_m5speaker.cpp, DMA 64x4)
   - 電源: PMIC 無し。USB 給電は検出できないので `HWCDC::isPlugged()` (PC と USB シリアルで通信中) で代用。
     充電器だけなら電池運用と同じく 3 分で眠る。スリープはバックライト G38 を LOW で gpio_hold し、G0 の EXT1 ANY_LOW で
@@ -427,6 +427,9 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   マクロや #include の行末コメントは clang-format が `\` で折り返して崩すので、コメントは前の行に書く。
   例外: sketch.yaml の URL と Cardputer の fqbn は分割できないので 80 桁を超える。test/host/Makefile はタブを
   使わないよう `target: deps ; command` の形で書いてある (macOS の GNU Make 3.81 は .RECIPEPREFIX が無い)
+- ボタンの呼び方は全機種で **BtnA (正面) / BtnB (側面)** (2026-11-03 ユーザー指示。Nesso のライブラリのピン名 KEY1 / KEY2
+  はコードでだけ使う)。README の GPIO の書き方は "GPIO 4 (Grove pin 4)" の形にそろえる
+  (ストレート / DIT = Grove pin 4, DAH = Grove pin 3)
 - README は **README.md = 英語、README.ja.md = 日本語**。内容を変えたら両方を直すこと。CLAUDE.md は日本語のまま
 - ライセンスは MIT (LICENSE, Copyright (c) 2026 Takuo Watanabe)
 - **(2026-11-03 ユーザー指示)** 手持ちのデバイスの MAC アドレスや USB シリアルのシリアル番号 (/dev/cu.usbserial-XXXX の
@@ -439,7 +442,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 
 ### 作業の経緯 (コミット順)
 1. Nesso N1 2 台で ESP-NOW の基本機能 (§11 の全フェーズ) → 画面・設定画面の改訂 → オートスリープ → 赤い '?' と [SK]
-2. 通信チャンネルと複数局受信、Nesso のボタン割り当て変更 (KEY1 = チャンネル, KEY2 = 設定)
+2. 通信チャンネルと複数局受信、Nesso のボタン割り当て変更 (BtnA = チャンネル, BtnB = 設定)
 3. M5Stack Tab5 の調査 (ESP-NOW が使えず保留, §14)
 4. M5StickS3 対応 (ボード依存部を hw_* / tone_out_* / power_* に分離)
 5. LoRa 対応 (Nesso のみ, §4.6)。チャンネル数を 10 → 8 に変更 (ユーザー指示)
@@ -471,8 +474,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     (コメントを除いたトークン列を整形前と比較して確認。違いは長い文字列の分割と board.h の #error の文言だけ)
 18. (2026-11-03) Cardputer ADV + Cap LoRa-1262 で LoRa に対応。Cap の技適の範囲に合わせて全局の LoRa を
     922.0〜923.4MHz / BW125 に変更 (§4.6, §10)
-19. (2026-11-03) 登録メッセージの送信 (ユーザー要望): KEY1 長押し (Cardputer は fn + ↓) で 1 回送る。
-    **それまでの KEY1 長押し = チャンネル -1 は廃止** (短押しで循環するので 8 チャンネルとも選べる)。
+19. (2026-11-03) 登録メッセージの送信 (ユーザー要望): BtnA 長押し (Cardputer は fn + ↓) で 1 回送る。
+    **それまでの BtnA 長押し = チャンネル -1 は廃止** (短押しで循環するので 8 チャンネルとも選べる)。
     メッセージは `msg TEXT` で設定 (大文字化・空白の連続をまとめる、モールスの無い文字は拒否、64 文字まで, cfg::MSG_MAX)、
     Preferences のキー "msg"、既定 "VVV VVV" (cfg::MSG_DEFAULT。DEFAULTS / `defaults` でも戻る)。
     送信は g_typeBuf に積む (キーボード・端末モードと同じ。未送信の文字があれば語間を挟んで後ろに付け、入りきらなければ無視)。
@@ -510,12 +513,12 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - 画面 (ユーザー要望で改訂済み):
   - メイン画面: 最上段にリンク状態 (dBm・loss・R再同期・Wウォッチドッグ、Font2)、右端に電池 % (+充電中)。
     RX 3 行 (緑) / TX 2 行 (黄)、文字は Font0 x2
-  - メイン画面のボタン (2026-10-30 にユーザー指示で変更): KEY1 短押し = チャンネル +1 (循環)、KEY1 長押し = 登録メッセージの送信 (2026-11-03 変更。以前はチャンネル -1)、
-    KEY2 短押し = 設定画面、KEY2 長押し = テキスト消去。チャンネル切り替え時は中央に "CH n" を 1.2 秒大きく表示
+  - メイン画面のボタン (2026-10-30 にユーザー指示で変更): BtnA 短押し = チャンネル +1 (循環)、BtnA 長押し = 登録メッセージの送信 (2026-11-03 変更。以前はチャンネル -1)、
+    BtnB 短押し = 設定画面、BtnB 長押し = テキスト消去。チャンネル切り替え時は中央に "CH n" を 1.2 秒大きく表示
     (ユーザーが実機で確認済み)
   - 最上段: [CHn] x局数(2局以上) dBm L% R W ... 電池
-  - 設定画面: KEY2 短押しで入る。項目はタッチまたは KEY1(次)/KEY2(前) で選び、右側のタッチ [▲]/[▼] で変更 (2026-11-01 ユーザー要望で + / - から図形の三角に変更。ユーザー確認済み)
-    (押し続けで連続)。KEY1/KEY2 長押し または 30 秒無操作で抜けて保存。
+  - 設定画面: BtnB 短押しで入る。項目はタッチまたは BtnA(次)/BtnB(前) で選び、右側のタッチ [▲]/[▼] で変更 (2026-11-01 ユーザー要望で + / - から図形の三角に変更。ユーザー確認済み)
+    (押し続けで連続)。BtnA/BtnB 長押し または 30 秒無操作で抜けて保存。
     項目 (表示順, 2026-11-01 ユーザー指定): RADIO / MODE / PADDLE / SPEED / SIDETONE / VOLUME / SIDE FREQ / RX FREQ /
     DEFAULTS (ui.h の enum Item の並び = 表示順。チャンネルは設定画面に無い)。
     DEFAULTS (2026-11-01 ユーザー要望): +/- を 1 回押すと "PRESS AGAIN"、3 秒 (DEFAULTS_CONFIRM_MS) 以内の 2 回目で
@@ -533,7 +536,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - デコード: 解読できない符号は CHAR_UNKNOWN (0x01) として出し、画面では赤い '?'。
   略符号は morse_table.h の prosignTable (現在 `...-.-` → "[SK]" のみ。AR/BT は + / = のままで良いとユーザー確認済み)
 - オートスリープ: 電池運用時 (VIN_DETECT=LOW)、キー・ボタン/タッチ・受信の遷移がどれも 3 分間なければ
-  ディープスリープ (画面消灯)。10 秒前から "SLEEP in Ns" を表示。KEY1/KEY2 で復帰 (再起動、押したボタンは無視)。
+  ディープスリープ (画面消灯)。10 秒前から "SLEEP in Ns" を表示。BtnA/BtnB で復帰 (再起動、押したボタンは無視)。
   USB 給電中は眠らない (StickC Plus2 は USB 給電を検出できないので USB 接続中も眠る。BtnA/BtnB で復帰)。
   3 機種ともユーザーが電池で動作確認済み
 - チャンネル: パケットの channel バイト (1..8, config.h の CH_*。2026-10-30 にユーザー指示で 10 → 8)。Preferences に保存。切り替えると受信中の全局を忘れる。
