@@ -2,8 +2,6 @@
 // The buttons (BtnA = GPIO11, BtnB = GPIO12) are wired directly to ESP32-S3 RTC
 // GPIOs, so EXT1 can wake directly.
 #include "board.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #if defined(BOARD_STICKS3)
 #include "power.h"
 #include <M5Unified.h>

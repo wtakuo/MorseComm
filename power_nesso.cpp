@@ -1,7 +1,5 @@
 // power_nesso.cpp - Arduino Nesso N1: USB power detection and deep sleep
 #include "board.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #if defined(BOARD_NESSO_N1)
 #include "power.h"
 #include <Arduino_Nesso_N1.h>

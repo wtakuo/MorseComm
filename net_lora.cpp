@@ -22,8 +22,6 @@
 // packet]. All stations broadcast to each other on the same frequency as peers
 // (no master/slave distinction).
 #include "board.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #include "net_internal.h"
 
 #if defined(BOARD_NESSO_N1) || defined(BOARD_CARDPUTER)

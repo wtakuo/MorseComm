@@ -1,5 +1,0 @@
-#!/bin/sh
-# post-rewrite: reflect the commit hash in git_version.h
-# (tools/update-git-version.sh)
-# To enable: git config core.hooksPath tools/githooks
-exec "$(git rev-parse --show-toplevel)/tools/update-git-version.sh"

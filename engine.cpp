@@ -1,6 +1,4 @@
 #include "engine.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #include <Arduino.h>
 #include <esp_random.h>
 #include <string.h>

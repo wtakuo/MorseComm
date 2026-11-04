@@ -7,8 +7,7 @@
 //   buttons, serial commands, saving settings
 // See CLAUDE.md / README.md for details.
 #include <Arduino.h>
-#include "build_info.h"
-BUILD_INFO_UNIT();
+#include "version.h"
 #include <Preferences.h>
 #include "board.h"
 #include "config.h"
@@ -630,8 +629,7 @@ void handleCommand(char* line) {
         return;
     } else if (!strcmp(cmd, "show")) {
         power::printStatus();
-        Serial.printf("build: %s commit: %s\r\n", buildinfo::stamp(),
-                      buildinfo::commit());
+        Serial.printf("version: %s\r\n", VERSION);
         Serial.printf("touch=%s\r\n",
                       ui::touchAvailable() ? "ok" : "not found");
         Serial.printf("msg=\"%s\"\r\n", g_message);
@@ -1004,7 +1002,7 @@ void setup() {
     Serial.begin(115200);
 #endif
     ui::begin();
-    ui::drawSplash(buildinfo::stamp(), buildinfo::commit());
+    ui::drawSplash(VERSION);
     splashUntil = millis() + cfg::SPLASH_MS;
     loadSettings();  // after ui::begin (M5.begin), since board detection
                      // (Cardputer / ADV) is needed
@@ -1013,10 +1011,10 @@ void setup() {
     net::ownMac(mac);
     Serial.printf(
         "MorseComm start (%s%s): MAC %02X:%02X:%02X:%02X:%02X:%02X radio=%s %s "
-        "build=%s commit=%s\r\n",
+        "version=%s\r\n",
         board::NAME, hw::hasPhoneJack() ? " ADV" : "", mac[0], mac[1], mac[2],
         mac[3], mac[4], mac[5], radioName(net::radio()), ok ? "ok" : "FAILED",
-        buildinfo::stamp(), buildinfo::commit());
+        VERSION);
     printSettings();
 }
 

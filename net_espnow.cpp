@@ -1,7 +1,5 @@
 // net_espnow.cpp - ESP-NOW (broadcast) send/receive
 #include "net_internal.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>

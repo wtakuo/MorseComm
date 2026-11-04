@@ -1,8 +1,6 @@
 // net.cpp - Common radio part: receive queue, stats, loss injection, dispatch
 // by radio type
 #include "net_internal.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #include <Arduino.h>
 #include <esp_mac.h>
 #include <esp_random.h>

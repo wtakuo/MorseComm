@@ -11,8 +11,6 @@
 // Plus: the AXP192 PMIC keeps power (unchanged during ESP32 deep sleep). USB
 // power is detected via the AXP192 VBUS voltage.
 #include "board.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #if defined(BOARD_STICKC_PLUS2) || defined(BOARD_STICKC_PLUS)
 #include "power.h"
 #include <M5Unified.h>

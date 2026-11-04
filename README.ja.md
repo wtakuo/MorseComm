@@ -68,14 +68,7 @@ M5Stack Cardputer (初代) と Cardputer ADV は次のとおりです。**同じ
 同じフォルダから複数の機種をビルドするので、**機種ごとに別のビルドディレクトリ** (`--build-path`) を指定します
 (同じにすると、別の機種向けのファイルを書き込もうとして失敗します)。
 
-起動画面に git のコミットハッシュを出すため、ビルドの前に `tools/update-git-version.sh` を実行します
-(`git_version.h` を作ります。実行しなかった場合や git の外では `unknown` と表示されます)。
-`git config core.hooksPath tools/githooks` を一度実行しておくと、コミット・チェックアウト・マージ・リベースのたびに
-git のフック (`tools/githooks/`) が自動で実行するので、手で実行する必要はなくなります (クローンごとに 1 回)。
-
 ```sh
-# コミットハッシュを git_version.h に書く
-tools/update-git-version.sh
 # ビルドして書き込む (例: Cardputer)
 arduino-cli compile --profile cardputer --build-path build/cardputer -u -p /dev/cu.usbmodemXXXX .
 # ビルドだけ
@@ -88,11 +81,9 @@ arduino-cli compile --profile nesson1 --build-path build/nesson1 .
 
 ### 起動画面
 
-電源を入れたとき・リセットしたときは、3 秒間スプラッシュスクリーンを表示します。中央に `MorseComm`、その下にビルド日時
-(`20261101123734` のような年月日時分秒) と git のコミットハッシュ (`0820299` など。コミットしていない変更を含むビルドは
-末尾に `+`) が出るので、どの本体にどのビルドが入っているかを確かめられます。
-ビルド日時は機種ごとにビルドした時刻なので、同じソースでも機種によって違います。ソースが同じかどうかはコミットハッシュで比べます。
-同じ情報はシリアルの起動メッセージ (`build=... commit=...`) と `show` にも出ます。
+電源を入れたとき・リセットしたときは、3 秒間スプラッシュスクリーンを表示します。中央に `MorseComm`、その下にバージョン
+(`v0.1.0` など) と作者 (`Takuo Watanabe (JM1TEU)` / `w/ Claude`) が出ます。バージョンはセマンティックバージョニング (`x.y.z`) で、`version.h` に書いてあります。
+同じバージョンはシリアルの起動メッセージ (`version=...`) と `show` にも出ます。
 
 ### メイン画面
 
@@ -325,7 +316,7 @@ Cardputer ADV では Cap は専用の SPI バス (microSD スロットとだけ�
 |---|---|
 | `MorseComm.ino` | setup/loop、ボタン・タッチ、シリアルコマンド、設定保存 |
 | `engine.h/.cpp` | 1 ms 周期のキーイングタスク |
-| `build_info.h/.cpp` | ビルド日時 (各ソースのコンパイル日時の最新) |
+| `version.h` | バージョン番号 (`VERSION`、セマンティックバージョニング) |
 | `config.h` | パラメータ (送信間隔、ジッタ遅延、ウォッチドッグなど。ボード共通) |
 | `board.h` | ボードの判別とキーのピン |
 | `protocol.h` | パケット形式、送信側の遷移履歴と送信スケジューラ |

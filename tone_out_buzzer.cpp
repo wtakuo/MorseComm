@@ -1,8 +1,6 @@
 // tone_out_buzzer.cpp - Drives the built-in piezo buzzer with LEDC PWM
 // Arduino Nesso N1: GPIO11 (BEEP_PIN) / M5StickC Plus2, Plus: G2
 #include "board.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #if defined(BOARD_NESSO_N1) || defined(BOARD_STICKC_PLUS2) || \
     defined(BOARD_STICKC_PLUS)
 #include "tone_out.h"

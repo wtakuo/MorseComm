@@ -13,8 +13,6 @@
 // the same coordinates as the original (x = 2r + (c > 3), y = c % 4, same as
 // M5Cardputer's TCA8418.cpp). Polled every 20 ms without using the interrupt.
 #include "board.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #include "hw.h"
 
 #if defined(BOARD_CARDPUTER)

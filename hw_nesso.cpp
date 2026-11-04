@@ -1,7 +1,5 @@
 // hw_nesso.cpp - Arduino Nesso N1 screen, buttons, touch, battery
 #include "board.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #if defined(BOARD_NESSO_N1)
 #include "hw.h"
 #include <Arduino_Nesso_N1.h>

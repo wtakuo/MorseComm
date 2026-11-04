@@ -3,8 +3,6 @@
 // To reduce sidetone latency, make the I2S DMA buffer much shorter than the
 // default (256 x 8 ~= 93ms @22kHz).
 #include "board.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #if defined(BOARD_STICKS3) || defined(BOARD_CARDPUTER)
 #include "tone_out.h"
 #include <M5Unified.h>

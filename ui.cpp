@@ -1,6 +1,4 @@
 #include "ui.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #include <Arduino.h>
 #include <string.h>
 
@@ -260,18 +258,22 @@ void begin() {
 
 void sleepDisplay() { hw::displaySleep(); }
 
-void drawSplash(const char* buildStamp, const char* commit) {
+void drawSplash(const char* version) {
     canvas.fillScreen(COL_BG);
     canvas.setTextDatum(textdatum_t::middle_center);
     canvas.setFont(&fonts::Font4);
     canvas.setTextSize(1);
     canvas.setTextColor(TFT_WHITE, COL_BG);
-    canvas.drawString("MorseComm", W / 2, H / 2 - 18);
+    canvas.drawString("MorseComm", W / 2, H / 2 - 32);
     useLabelFont();
     canvas.setTextDatum(textdatum_t::middle_center);
     canvas.setTextColor(COL_LABEL, COL_BG);
-    canvas.drawString(buildStamp, W / 2, H / 2 + 10);
-    canvas.drawString(commit, W / 2, H / 2 + 28);
+    char buf[24];
+    snprintf(buf, sizeof(buf), "v%s", version);
+    canvas.drawString(buf, W / 2, H / 2 - 6);
+    // Author, on two lines to leave margins on the 240 px wide screen
+    canvas.drawString("Takuo Watanabe (JM1TEU)", W / 2, H / 2 + 22);
+    canvas.drawString("w/ Claude", W / 2, H / 2 + 40);
     canvas.setTextDatum(textdatum_t::top_left);
     present();
 }

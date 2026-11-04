@@ -2,8 +2,6 @@
 // M5StickC Plus / Cardputer (uses M5Unified; no touch; the Cardputer keyboard
 // is in keyboard_cardputer.cpp)
 #include "board.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #if defined(BOARD_M5UNIFIED)
 #include "hw.h"
 #include <M5Unified.h>

@@ -8,8 +8,6 @@
 // (G38, PWM) is held LOW, and the G0 button (BtnA) wakes it. The hold is
 // released in begin() of hw_m5stick.cpp.
 #include "board.h"
-#include "build_info.h"
-BUILD_INFO_UNIT();
 #if defined(BOARD_CARDPUTER)
 #include "power.h"
 #include <M5Unified.h>

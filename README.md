@@ -68,14 +68,7 @@ written as profiles in `sketch.yaml`, and arduino-cli downloads them automatical
 Because multiple models are built from the same folder, specify **a separate build directory for each model** (`--build-path`)
 (if they share one, uploading fails because it tries to write files built for another model).
 
-To show the git commit hash on the startup screen, run `tools/update-git-version.sh` before building
-(it creates `git_version.h`; if it has not been run, or outside git, `unknown` is shown).
-If you run `git config core.hooksPath tools/githooks` once, git hooks (`tools/githooks/`) run it automatically on every
-commit, checkout, merge, and rebase, so you no longer need to run it by hand (once per clone).
-
 ```sh
-# Write the commit hash to git_version.h
-tools/update-git-version.sh
 # Build and upload (example: Cardputer)
 arduino-cli compile --profile cardputer --build-path build/cardputer -u -p /dev/cu.usbmodemXXXX .
 # Build only
@@ -88,11 +81,9 @@ The key type (mode) and other settings are saved on each unit.
 
 ### Startup screen
 
-When powered on or reset, a splash screen is shown for 3 seconds. `MorseComm` appears in the center, and below it the build date and time
-(year, month, day, hour, minute, second, such as `20261101123734`) and the git commit hash (such as `0820299`; a build that includes
-uncommitted changes has a trailing `+`), so you can check which build is on which unit.
-The build date and time is when the build was made for each model, so it differs between models even for the same source. Use the commit hash to tell whether the source is the same.
-The same information also appears in the serial startup message (`build=... commit=...`) and in `show`.
+When powered on or reset, a splash screen is shown for 3 seconds. `MorseComm` appears in the center, and below it the version
+(such as `v0.1.0`) and the author (`Takuo Watanabe (JM1TEU)` / `w/ Claude`). The version follows semantic versioning (`x.y.z`) and is defined in `version.h`.
+The same version also appears in the serial startup message (`version=...`) and in `show`.
 
 ### Main screen
 
@@ -325,7 +316,7 @@ On the Cardputer ADV, the Cap uses its own SPI bus (shared only with the microSD
 |---|---|
 | `MorseComm.ino` | setup/loop, buttons and touch, serial commands, saving settings |
 | `engine.h/.cpp` | Keying task with a 1 ms period |
-| `build_info.h/.cpp` | Build date and time (the latest compile time among all sources) |
+| `version.h` | Version number (`VERSION`, semantic versioning) |
 | `config.h` | Parameters (send intervals, jitter delay, watchdog, etc. Common to all boards) |
 | `board.h` | Board detection and key pins |
 | `protocol.h` | Packet format, sender-side transition history and send scheduler |

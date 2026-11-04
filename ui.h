@@ -51,9 +51,9 @@ using Battery = hw::Battery;
 void begin();
 // Turn off the screen (before sleep)
 void sleepDisplay();
-// Splash screen at startup: "MorseComm" in the center, with the build date/time
-// and git commit hash below it
-void drawSplash(const char* buildStamp, const char* commit);
+// Splash screen at startup: "MorseComm" in the center, with the version and
+// the author below it
+void drawSplash(const char* version);
 void addChar(bool rx, char c);
 void clearText();
 

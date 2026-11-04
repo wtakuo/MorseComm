@@ -76,7 +76,7 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   LICENSE               # MIT
   .clang-format         # コード整形の設定 (4 スペース, 80 桁)
   sketch.yaml           # ビルドプロファイル
-  build_info.h/.cpp     # ビルド日時とコミットハッシュ
+  version.h             # 公開バージョン (#define VERSION "x.y.z")
 test/
   host/                 # Mac上で g++ でビルドするユニットテスト・損失シミュレーション
 ```
@@ -459,7 +459,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 15. (2026-11-01) 起動時のスプラッシュスクリーン (MorseComm + ビルド日時 YYYYMMDDhhmmss, 3 秒, cfg::SPLASH_MS)。
     ビルド日時は build_info.h の BUILD_INFO_UNIT() で各ソース (.cpp/.ino) のコンパイル日時を登録し、その最新を使う
     (arduino-cli は変わっていないソースを再コンパイルしないため、1 ファイルの __DATE__/__TIME__ では古くなる)。
-    **ソースファイルを追加したら BUILD_INFO_UNIT() を書くこと**。シリアルの起動メッセージ (build=) と show にも出す。
+    シリアルの起動メッセージ (build=) と show にも出す。(20 で廃止)
     スプラッシュ中も送受信・入力は動いており、メイン画面の描画だけを待つ。Cardputer / ADV で画面とシリアルをユーザーが確認済み
 16. (2026-11-01) スプラッシュと show に git のコミットハッシュ (7 桁、未コミットの変更があれば末尾 "+") を追加。
     arduino-cli にはビルド時にコマンドを走らせる仕組みが無いので、**ビルドの前に `tools/update-git-version.sh` を実行**して
@@ -468,7 +468,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     (ユーザー依頼で作成)。有効にするには `git config core.hooksPath tools/githooks` (クローンごとに 1 回)。
     この設定は自動モードの安全チェックで「永続的な設定」として Claude からは拒否されるので、ユーザーが実行する。
     このクローンではユーザーが設定済み (2026-11-01)。コミットのたびに git_version.h が自動で更新される
-    StickS3 でスプラッシュのコミットハッシュ表示をユーザーが確認済み
+    StickS3 でスプラッシュのコミットハッシュ表示をユーザーが確認済み (20 で廃止)
 17. (2026-11-01) 公開準備: コメント・文字列を英語 (US-ASCII のみ) に、4 スペース・80 桁に整形 (clang-format)、
     README を英語 (README.md) と日本語 (README.ja.md) に、LICENSE (MIT) を追加。コードの中身は変えていない
     (コメントを除いたトークン列を整形前と比較して確認。違いは長い文字列の分割と board.h の #error の文言だけ)
@@ -481,6 +481,13 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
     送信は g_typeBuf に積む (キーボード・端末モードと同じ。未送信の文字があれば語間を挟んで後ろに付け、入りきらなければ無視)。
     `show` にも msg= を出す。電波 OFF でもサイドトーンとデコード表示で練習に使える
     ユーザーが手持ちの全機種に書き込み (arduino-cli, ユーザー自身が実施)、全機種で動作を確認済み (2026-11-03)
+
+20. (2026-11-04) **バージョン番号の導入 (ユーザー決定):** セマンティックバージョニング x.y.z。最初は **0.1.0**。
+    version.h の `#define VERSION "0.1.0"` に公開バージョンを書き、スプラッシュ (`v0.1.0`)・シリアルの起動メッセージ
+    (`version=`)・`show` (`version:`) に出す。これに伴い 15 / 16 のビルド日時とコミットハッシュの仕掛け
+    (build_info.h/.cpp, BUILD_INFO_UNIT(), tools/update-git-version.sh, tools/githooks/, git_version.h) は削除した。
+    **バージョンを上げるときは version.h だけを直す**。スプラッシュのバージョンの下に作者 "Takuo Watanabe (JM1TEU)" /
+    "w/ Claude" (2 行, ui.cpp の drawSplash) を表示 (ユーザー指定)
 
 ### 現在の状態 (2026-11-01)
 - 3 機種 (Nesso N1 ×2 / M5StickS3 / M5StickC Plus2 ×2) すべてに最新版 (10 まで) を書き込み、ユーザーが実機で動作確認済み
@@ -577,7 +584,6 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   StickS3 と Nesso の ESP-NOW での相互通信はユーザーが確認済み
 
 ### 実機テストの手順 (再開時に使う)
-- ビルドの前に `tools/update-git-version.sh` (コミットハッシュを git_version.h に書く)
 - **書き込みは sketch.yaml のプロファイルを使う** (2026-11-01 ユーザー要望で作成。プロファイル: nesson1 / sticks3 /
   stickcplus2 / stickcplus / cardputer。ボードパッケージ・ライブラリのバージョンとボードのオプションを固定してある):
   `arduino-cli compile --profile <名前> --build-path build/<名前> -u -p PORT .` (全プロファイルのビルドと cardputer の
