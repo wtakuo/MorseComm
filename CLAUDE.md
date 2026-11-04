@@ -29,7 +29,7 @@ ESP32-C6 搭載の Arduino Nesso N1 2台の間で、ESP-NOW (Wi-Fiルータ不�
   https://docs.arduino.cc/hardware/nesso-n1
 - フレームワーク: Arduino (C++)
 - ビルド: `/opt/homebrew/bin/arduino-cli`
-- 実機: Nesso 2 台・StickS3・StickC Plus2 のうち、その時々につないだものが Mac に接続される。シリアルポートと `show` で区別する
+- 実機: 手持ちの各機種 (§10。Nesso ×3, StickS3 ×2 など) のうち、その時々につないだものが Mac に接続される。シリアルポートと `show` で区別する
 - **FQBN・必要なボードパッケージ・ディスプレイ/ブザー等のライブラリは、推測せず調べて確認すること。**
   `arduino-cli board list` / `core list` / `core search` / `lib search` を使い、
   確認できた FQBN と手順はこのファイルの §10 に追記する
@@ -277,6 +277,8 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - M5StickS3 (2026-10-30 調査・実機確認):
   - FQBN: `m5stack:esp32:m5stack_sticks3` (M5Stack のボードパッケージ 3.3.10。esp32:esp32 には無い)。
     コアのヘッダが NUM_DIGITAL_PINS 等の再定義警告を出すが無害
+  - 手持ちは 2 台: 開発当初からの StickS3 A と、2026-11-04 に追加した StickS3 B。設定 (show) は同じなので、
+    ポートからはどちらか区別できない
   - **複数機種を同じフォルダからビルドするので `--build-path build/<board>` を必ず分ける**
     (分けないとビルドキャッシュが共有され、別チップ向けのブートローダを書こうとして失敗する)
   - 画面: ST7789 135x240 を M5GFX が自動判別 (M5.Display)、`setRotation(1)` で 240x135。向きはユーザー確認済み
@@ -497,9 +499,12 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 ### 書き込んであるビルド (2026-11-01)
 - (2026-11-03) Cardputer ADV と Nesso C にコミット f3fe800
   (LoRa 922MHz 版) を書き込み済み。**LoRa の周波数・帯域を変えたので、他の Nesso も書き直さないと LoRa で通信できない**。
-  ADV の RADIO は試験で LoRa にしたまま。同日 Nesso A / B にも 58de82b を書き込み、LoRa で 4 台 (Nesso ×3, ADV) の
+  ADV の RADIO は試験で LoRa にしたが、2026-11-04 の時点では ESP-NOW に戻っている。同日 Nesso A / B にも 58de82b を書き込み、LoRa で 4 台 (Nesso ×3, ADV) の
   通信をユーザーが確認済み
-- 全 11 台 (Nesso ×2, StickS3, Plus2 ×2, Plus ×2, Cardputer, Cardputer ADV) にコミット 1282329 のビルドを書き込み済み。
+- (2026-11-04) Nesso A / B / C、StickS3 A / B、Plus2 A / B、Plus A / B、Cardputer (初代)、Cardputer ADV の全 13 台に
+  コミット 686df5c (バージョン 0.1.0、作者表示) を書き込み済み。
+  スプラッシュの表示 (バージョンと作者) を全機種でユーザーが確認済み
+- 全 11 台 (Nesso ×2, StickS3 A, Plus2 ×2, Plus ×2, Cardputer, Cardputer ADV) にコミット 1282329 のビルドを書き込み済み。
   スプラッシュの表示を StickS3・Nesso・Plus2・Plus・Cardputer (初代・ADV) の全機種でユーザーが確認済み
 
 ### 次にやること (ユーザー予定)
@@ -566,7 +571,7 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
   sleep / help (README に一覧)。`stats` の `|` 以降は送信側 (無線の種類, sent, csBusy, air など)
 - 設定は Preferences (名前空間 "morse") に保存。キー: mode wpm sideon sidehz rxhz vol swap ch radio msg、
   ジッタ遅延は無線ごとに jitter (ESP-NOW, 既定 150) / ljitter (LoRa, 既定 250)。
-  実機 (2026-11-01 の状態): いずれも ESP-NOW・CH1。Nesso A = IAMBIC_B, Nesso B = STRAIGHT, StickS3 = IAMBIC_B,
+  実機 (2026-11-01 の状態): いずれも ESP-NOW・CH1。Nesso A = IAMBIC_B, Nesso B = STRAIGHT, StickS3 A = IAMBIC_B (2026-11-04 の StickS3 B も IAMBIC_B 20WPM),
   Plus2 A = IAMBIC_B 22WPM, Plus2 B = IAMBIC_B 20WPM。設定はユーザーがよく変えるので、試験前に `show` で
   記録し、試験で変えたら元に戻すこと (ポート番号は接続のたびに変わる)
 - M5StickS3 対応 (2026-10-30): 上記の機能はすべて共通。設定画面はタッチが無いので選択/変更モード
