@@ -613,6 +613,13 @@ Arduino 非依存のロジック部分を `g++` でビルドして自動テス�
 - LoRa の調査用に使った単体スケッチ (雑音スキャン、ping/pong、連続送信) はリポジトリに入れていない
   (セッションの一時ディレクトリにあった)。必要なら net_lora.cpp を参考に作り直す
 - ホストテスト: `make -C test/host test`
+- **スクリーンショット (README 用など, 2026-11-06):** 撮影用のコードは `screenshot` ブランチにある (MorseGame と同じく、
+  公開版の main には入れない。ユーザーの方針)。Cardputer 専用 (TF カードのスロット)。使うときは main に rebase し、
+  `--build-property compiler.cpp.extra_flags=-DSCREENSHOT` を付けてビルドする。起動時にスプラッシュを、以降はシリアルの
+  `shot` で今の画面 (main / settings) を TF カードの `/morsecomm_<名前>_<nn>.png` に保存。手順は screenshot.h の先頭。
+  M5GFX の createPng() は約 300KB のヒープが要り、PSRAM の無い Cardputer では失敗する (nullptr) ので、キャンバスから 1 行ずつ
+  無圧縮 (stored ブロック) の PNG を書き出している (240x135 で約 98KB)。撮影後は普通のビルドを書き戻すこと。
+  screenshot ブランチは GitHub に push しない (ユーザー指示)
 
 ### 既知の制限・今後の候補 (ユーザー未依頼)
 - UP のパケットが全部落ちる極端な条件では、語末の要素がウォッチドッグぶん長くなる (例: dit 60→141ms)。仕様上の限界
